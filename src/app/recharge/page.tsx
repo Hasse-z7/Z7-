@@ -29,8 +29,10 @@ interface Package {
 
 interface QRCode {
   id: string;
-  payment_method: string;
-  image_url: string;
+  type: string;
+  file_url: string;
+  file_key: string;
+  is_active: boolean;
   updated_at: string;
 }
 
@@ -56,7 +58,6 @@ export default function RechargePage() {
   const [showQRUpload, setShowQRUpload] = useState(false);
   const [showNoQRAlert, setShowNoQRAlert] = useState(false);
   const [uploadMethod, setUploadMethod] = useState<'wechat' | 'alipay'>('wechat');
-  const [uploadUrl, setUploadUrl] = useState('');
 
   const fetchPackages = useCallback(async () => {
     try {
@@ -75,8 +76,8 @@ export default function RechargePage() {
       if (data.qrcodes) {
         setQrcodes(data.qricodes || data.qrcodes);
         // Check if both QR codes exist
-        const hasWechat = data.qrcodes.some((q: QRCode) => q.payment_method === 'wechat' && q.image_url);
-        const hasAlipay = data.qrcodes.some((q: QRCode) => q.payment_method === 'alipay' && q.image_url);
+        const hasWechat = data.qrcodes.some((q: QRCode) => q.type === 'wechat' && q.file_url);
+        const hasAlipay = data.qrcodes.some((q: QRCode) => q.type === 'alipay' && q.file_url);
         if (!hasWechat || !hasAlipay) {
           setShowNoQRAlert(true);
         }
@@ -91,8 +92,8 @@ export default function RechargePage() {
     fetchQRCodes();
   }, [fetchPackages, fetchQRCodes]);
 
-  const wechatQR = qrcodes.find(q => q.payment_method === 'wechat');
-  const alipayQR = qrcodes.find(q => q.payment_method === 'alipay');
+  const wechatQR = qrcodes.find(q => q.type === 'wechat');
+  const alipayQR = qrcodes.find(q => q.type === 'alipay');
 
   const handleCreateOrder = async () => {
     if (!selectedPackage || !user) return;
@@ -147,17 +148,25 @@ export default function RechargePage() {
     }
   };
 
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+
   const handleUploadQR = async () => {
-    if (!uploadUrl) return;
+    if (!uploadFile) {
+      alert('请选择收款码图片');
+      return;
+    }
     try {
-      const res = await fetch('/api/qrcodes', {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      formData.append('payment_method', uploadMethod);
+      const res = await fetch('/api/upload/qrcode', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_method: uploadMethod, image_url: uploadUrl }),
+        body: formData,
       });
       const data = await res.json();
-      if (data.qrcode) {
+      if (data.success) {
         setShowQRUpload(false);
+        setUploadFile(null);
         fetchQRCodes();
         alert('收款码上传成功!');
       } else {
@@ -187,7 +196,7 @@ export default function RechargePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {!wechatQR?.image_url && (
+              {!wechatQR?.file_url && (
                 <Button
                   className="w-full bg-green-600 hover:bg-green-700 text-white"
                   onClick={() => { setUploadMethod('wechat'); setShowQRUpload(true); }}
@@ -196,7 +205,7 @@ export default function RechargePage() {
                   上传微信商业收款码
                 </Button>
               )}
-              {!alipayQR?.image_url && (
+              {!alipayQR?.file_url && (
                 <Button
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                   onClick={() => { setUploadMethod('alipay'); setShowQRUpload(true); }}
@@ -221,22 +230,22 @@ export default function RechargePage() {
               上传{uploadMethod === 'wechat' ? '微信商业收款码' : '支付宝商户收款码'}
             </DialogTitle>
             <DialogDescription>
-              请上传{uploadMethod === 'wechat' ? '微信' : '支付宝'}收款码图片链接，上传后将在支付页面展示
+              请选择{uploadMethod === 'wechat' ? '微信' : '支付宝'}收款码图片文件，上传后将在支付页面展示
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <Input
-              placeholder="输入收款码图片URL地址"
-              value={uploadUrl}
-              onChange={(e) => setUploadUrl(e.target.value)}
+              type="file"
+              accept="image/*"
+              onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
             />
             <p className="text-xs text-muted-foreground">
-              提示：请先上传收款码图片到对象存储，然后粘贴图片URL到此处
+              提示：请上传{uploadMethod === 'wechat' ? '微信商业收款码' : '支付宝商户收款码'}图片，支持 JPG/PNG 格式
             </p>
             <Button
               className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
               onClick={handleUploadQR}
-              disabled={!uploadUrl}
+              disabled={!uploadFile}
             >
               确认上传
             </Button>
@@ -354,10 +363,10 @@ export default function RechargePage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {wechatQR?.image_url ? (
+                  {wechatQR?.file_url ? (
                     <div className="flex flex-col items-center">
                       <div className="relative w-48 h-48 border-2 border-green-500/20 rounded-lg overflow-hidden">
-                        <Image src={wechatQR.image_url} alt="微信收款码" fill className="object-contain" />
+                        <Image src={wechatQR.file_url} alt="微信收款码" fill className="object-contain" />
                       </div>
                       <p className="text-sm text-muted-foreground mt-2">打开微信扫一扫付款</p>
                     </div>
@@ -391,10 +400,10 @@ export default function RechargePage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {alipayQR?.image_url ? (
+                  {alipayQR?.file_url ? (
                     <div className="flex flex-col items-center">
                       <div className="relative w-48 h-48 border-2 border-blue-500/20 rounded-lg overflow-hidden">
-                        <Image src={alipayQR.image_url} alt="支付宝收款码" fill className="object-contain" />
+                        <Image src={alipayQR.file_url} alt="支付宝收款码" fill className="object-contain" />
                       </div>
                       <p className="text-sm text-muted-foreground mt-2">打开支付宝扫一扫付款</p>
                     </div>
