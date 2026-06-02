@@ -41,6 +41,7 @@ export default function CreateVideoPage() {
   const [mode, setMode] = useState<'text2video' | 'img2video' | 'extend' | 'enhance'>('text2video');
   const [duration, setDuration] = useState(5);
   const [loading, setLoading] = useState(false);
+  const [pollingStatus, setPollingStatus] = useState<string>(''); // 排队中/渲染中
   const [resultUrl, setResultUrl] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [videoRatio, setVideoRatio] = useState<string>('16:9');
@@ -187,6 +188,7 @@ export default function CreateVideoPage() {
 
     setLoading(true);
     setResultUrl('');
+    setPollingStatus('提交中...');
     try {
       const res = await fetch('/api/ai/video', {
         method: 'POST',
@@ -198,20 +200,79 @@ export default function CreateVideoPage() {
         body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio }),
       });
       const data = await res.json();
-      const videoUrl = data.video_url || data.videoUrl || data.url;
+
+      if (!res.ok || data.error) {
+        alert(data.error || '生成失败');
+        return;
+      }
+
+      // 更新算力余额
+      if (data.remaining_credits !== undefined) {
+        updateCredits(data.remaining_credits);
+      }
+
+      // 异步任务模式：轮询状态
+      const taskId = data.task_id;
+      if (!taskId) {
+        // 兼容旧版同步返回
+        const videoUrl = data.video_url || data.videoUrl || data.url;
+        if (videoUrl) setResultUrl(videoUrl);
+        return;
+      }
+
+      setPollingStatus('排队中...');
+      const videoUrl = await pollTaskStatus(taskId);
       if (videoUrl) {
         setResultUrl(videoUrl);
-        if (data.remaining_credits !== undefined) {
-          updateCredits(data.remaining_credits);
-        }
-      } else {
-        alert(data.error || '生成失败');
       }
     } catch {
       alert('生成失败，请重试');
     } finally {
       setLoading(false);
+      setPollingStatus('');
     }
+  };
+
+  /** 轮询任务状态，返回视频URL或空字符串 */
+  const pollTaskStatus = (taskId: string): Promise<string> => {
+    return new Promise((resolve) => {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/ai/video/status?task_id=${taskId}`, {
+            credentials: 'include',
+            headers: getAuthHeaders(),
+          });
+          const data = await res.json();
+
+          if (data.status_text) {
+            setPollingStatus(data.status_text);
+          }
+
+          // 成功
+          if (data.status === 'succeeded' && data.video_url) {
+            clearInterval(interval);
+            resolve(data.video_url);
+            return;
+          }
+
+          // 失败/超时/已退算力
+          if (['failed', 'timeout', 'refunded'].includes(data.status)) {
+            clearInterval(interval);
+            alert(data.error_message || '视频生成失败');
+            resolve('');
+            return;
+          }
+        } catch {
+          // 轮询异常，继续尝试
+        }
+      }, 3000); // 每3秒轮询
+
+      // 最多轮询16分钟（略大于后端15分钟超时）
+      setTimeout(() => {
+        clearInterval(interval);
+        resolve('');
+      }, 16 * 60 * 1000);
+    });
   };
 
   return (
@@ -387,7 +448,7 @@ export default function CreateVideoPage() {
                   disabled={loading || !prompt.trim()}
                 >
                   {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                  {loading ? '生成中...' : '开始生成视频'}
+                  {loading ? (pollingStatus || '生成中...') : '开始生成视频'}
                 </Button>
               </CardContent>
             </Card>

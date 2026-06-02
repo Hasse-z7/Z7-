@@ -39,7 +39,12 @@
 │   │   └── api/            # API路由
 │   │       ├── auth/       # 认证API (login/register/profile)
 │   │       ├── recharge/   # 充值API (packages/create-order/verify-order)
-│   │       ├── ai/         # AI创作API (image/video/music/digital-human)
+│   │       ├── ai/         # AI创作API (image/video/music)
+│   │       │   └── video/ # 视频异步任务
+│   │       │       ├── route.ts    # 提交任务(预扣算力)
+│   │       │       ├── worker/     # Worker消费端(轮询方舟)
+│   │       │       ├── status/     # 状态查询(前端轮询)
+│   │       │       └── quota/      # 方舟额度监控(管理员)
 │   │       ├── qrcodes/    # 收款码API
 │   │       ├── templates/  # 模板API
 │   │       ├── orders/     # 订单API
@@ -53,7 +58,10 @@
 │   ├── contexts/           # React上下文
 │   │   └── auth-context.tsx  # 认证上下文（API路由认证）
 │   ├── lib/                # 工具库
-│   │   ├── coze-api.ts     # Coze AI API封装
+│   │   ├── coze-api.ts     # Coze AI API封装(生图/音乐)
+│   │   ├── ark-config.ts   # 方舟配置(Key池+熔断器)
+│   │   ├── ark-client.ts   # 方舟API客户端(视频生成)
+│   │   ├── credits-helpers.ts # 算力管理(扣除/退还/记录)
 │   │   ├── auth-helpers.ts # 认证辅助函数
 │   │   ├── supabase-browser.ts # Supabase浏览器客户端
 │   │   └── utils.ts        # 通用工具
@@ -77,13 +85,15 @@ pnpm ts-check          # TypeScript类型检查
 
 ## 数据库表结构
 
-- **profiles** - 用户资料（credits, vip_level, daily_xxx_count, is_admin）
+- **profiles** - 用户资料（credits, free_credits, paid_credits, vip_level, is_admin）
 - **recharge_packages** - 充值套餐（credits/vip类型，价格，算力，赠送算力）
 - **orders** - 充值订单（order_no, amount, status, payment_method）
-- **credits_transactions** - 算力流水（amount, balance_after, type, description）
+- **credits_transactions** - 算力流水（amount, balance_after, type, credits_type, description）
 - **user_works** - 用户作品（work_type, file_url, prompt, credits_cost）
 - **payment_qrcodes** - 收款码（wechat/alipay, image_url）
 - **templates** - AI模板（category, sub_category, prompt_template, credits_cost, is_vip_only）
+- **video_tasks** - 视频异步任务（status, ark_task_id, credits_cost, free_deducted, paid_deducted）
+- **ark_usage_logs** - 方舟调用日志（action, tokens_consumed, api_key_index, 两套独立账单）
 
 ## 认证方案
 
@@ -103,8 +113,22 @@ pnpm ts-check          # TypeScript类型检查
 
 - 单位：算力点，1元=10算力点
 - 永久有效，不清零
-- 新用户注册赠送50算力点
-- 每日登录赠送5算力点（跨天首次访问自动发放）
+- 新用户注册赠送50算力点（写入 free_credits）
+- 每日登录赠送5算力点（跨天首次访问自动发放，写入 free_credits）
+- 充值到账写入 paid_credits
+- 优先消耗免费算力(free_credits)，再消耗付费算力(paid_credits)
+
+## 火山方舟视频生成架构
+
+- 配置：`src/lib/ark-config.ts`（API Key池 + 负载均衡 + 熔断器）
+- 客户端：`src/lib/ark-client.ts`（提交任务 + 查询状态 + 重试 + Key轮转）
+- 固定模型接入点：`ark-45c3d43e-bbd4-48ef-b995-4f156a2c1967-31b72`
+- 请求域名：`https://ark.cn-beijing.volces.com/api/v3`
+- 环境变量 `ARK_API_KEYS`：逗号分隔多组Key，自动负载均衡切换
+- 异步流程：提交→预扣算力→创建任务→Worker消费→轮询方舟→成功锁定/失败退还
+- 熔断：1分钟内失败率超30%暂停接收新任务，60秒后半开
+- 重试：5xx/429指数退避最多3次，参数错误/密钥失效不重试
+- 独立账单：ark_usage_logs记录方舟调用消耗，credits_transactions记录用户算力
 
 ## 充值套餐
 
