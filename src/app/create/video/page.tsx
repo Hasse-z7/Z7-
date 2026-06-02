@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Film, Play, Upload, Download, Sparkles, Loader2, Video, Clapperboard, ZoomIn,
-  X, Plus, Music, PlayCircle, PauseCircle, Trash2
+  X, Plus, Music, PlayCircle, PauseCircle, Trash2, ChevronDown
 } from 'lucide-react';
 
 interface Template {
@@ -41,6 +41,34 @@ export default function CreateVideoPage() {
   const [mode, setMode] = useState<'text2video' | 'img2video' | 'extend' | 'enhance'>('text2video');
   const [duration, setDuration] = useState(5);
   const [loading, setLoading] = useState(false);
+  const [models, setModels] = useState<{id: string; name: string; endpoint_id: string; description: string}[]>([]);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+
+  // Fetch video models on mount
+  useEffect(() => {
+    fetch('/api/models?category=video')
+      .then(res => res.json())
+      .then(data => {
+        if (data.models) {
+          setModels(data.models);
+          // Restore from localStorage or use first model
+          const saved = localStorage.getItem('video_selected_model');
+          if (saved && data.models.some((m: {endpoint_id: string}) => m.endpoint_id === saved)) {
+            setSelectedModelId(saved);
+          } else if (data.models.length > 0) {
+            setSelectedModelId(data.models[0].endpoint_id);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleModelChange = (endpointId: string) => {
+    setSelectedModelId(endpointId);
+    localStorage.setItem('video_selected_model', endpointId);
+    setModelDropdownOpen(false);
+  };
   const [pollingStatus, setPollingStatus] = useState<string>(''); // 排队中/渲染中
   const [resultUrl, setResultUrl] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -197,7 +225,7 @@ export default function CreateVideoPage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio }),
+        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelId }),
       });
       const data = await res.json();
 
@@ -469,6 +497,46 @@ export default function CreateVideoPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Model Selection */}
+            {models.length > 0 && (
+              <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold">模型选择</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="relative">
+                    <button
+                      className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-border/50 bg-muted/30 text-sm hover:bg-muted/50 transition-colors"
+                      onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
+                    >
+                      <span className="truncate">
+                        {models.find(m => m.endpoint_id === selectedModelId)?.name || '选择模型'}
+                      </span>
+                      <ChevronDown className={`w-4 h-4 ml-2 shrink-0 transition-transform ${modelDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {modelDropdownOpen && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border/50 rounded-lg shadow-lg overflow-hidden">
+                        {models.map((model) => (
+                          <button
+                            key={model.id}
+                            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors ${
+                              selectedModelId === model.endpoint_id
+                                ? 'bg-cyan-500/10 text-cyan-400'
+                                : ''
+                            }`}
+                            onClick={() => handleModelChange(model.endpoint_id)}
+                          >
+                            <div className="font-medium">{model.name}</div>
+                            <div className="text-xs text-muted-foreground mt-0.5 font-mono">{model.endpoint_id.slice(0, 24)}...</div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Video Ratio Panel */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">

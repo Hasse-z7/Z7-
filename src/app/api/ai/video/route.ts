@@ -44,10 +44,16 @@ export async function POST(request: NextRequest) {
       resolution,
       audio,
       audio_url,
+      model_id,
     } = body;
 
     if (!prompt && !image_url && (!images || images.length === 0)) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
+    }
+
+    // ========== 2.1 校验模型ID ==========
+    if (!model_id || typeof model_id !== 'string' || !model_id.startsWith('ark-')) {
+      return NextResponse.json({ error: '请选择有效的生成模型' }, { status: 400 });
     }
 
     const { supabase } = authResult;
@@ -92,6 +98,7 @@ export async function POST(request: NextRequest) {
         credits_cost: creditsCost,
         free_deducted: deduction.freeDeducted,
         paid_deducted: deduction.paidDeducted,
+        model_endpoint: model_id,
       })
       .select('id')
       .maybeSingle();
@@ -115,7 +122,7 @@ export async function POST(request: NextRequest) {
       amount: -creditsCost,
       balanceAfter: deduction.newTotalCredits,
       type: 'consumption',
-      description: `AI视频预扣(${videoDuration}秒) - 任务 ${task.id.slice(0, 8)}`,
+      description: `AI视频预扣(${videoDuration}秒) - ${model_id.slice(0, 16)}... - 任务 ${task.id.slice(0, 8)}`,
       creditsType,
       relatedId: task.id,
     });

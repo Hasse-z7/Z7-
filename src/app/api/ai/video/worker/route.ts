@@ -111,6 +111,7 @@ async function processTask(taskId: string): Promise<void> {
       const result = await submitVideoTask({
         prompt: task.prompt,
         negativePrompt: task.negative_prompt || undefined,
+        model: task.model_endpoint || undefined,
         ratio: task.ratio || '16:9',
         duration: task.duration || 5,
         fps: task.fps || 24,

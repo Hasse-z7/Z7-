@@ -27,7 +27,8 @@ import {
 export interface VideoTaskRequest {
   prompt: string;
   negativePrompt?: string;
-  ratio?: string;          // 16:9, 9:16, 1:1, 4:3, 3:4, 21:9
+  model?: string;            // 模型Endpoint ID（前端传入，不写死）
+  ratio?: string;            // 16:9, 9:16, 1:1, 4:3, 3:4, 21:9
   duration?: number;        // 5 或 10
   fps?: number;            // 24
   referenceImages?: string[]; // 参考图URL数组
@@ -310,7 +311,7 @@ function buildRequestBody(params: VideoTaskRequest): Record<string, unknown> {
   }
 
   const body: Record<string, unknown> = {
-    model: ARK_MODEL_ENDPOINT,
+    model: params.model || ARK_MODEL_ENDPOINT,
     content,
   };
 
