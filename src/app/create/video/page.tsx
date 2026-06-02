@@ -197,7 +197,7 @@ export default function CreateVideoPage() {
         body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio }),
       });
       const data = await res.json();
-      const videoUrl = data.video_url || data.url;
+      const videoUrl = data.video_url || data.videoUrl || data.url;
       if (videoUrl) {
         setResultUrl(videoUrl);
         if (data.remaining_credits !== undefined) {

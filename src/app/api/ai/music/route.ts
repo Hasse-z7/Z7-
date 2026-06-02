@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { CozeAPI } from '@/lib/coze-api';
+import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getAuthUser } from '@/lib/auth-helpers';
+import { generateMusic } from '@/lib/coze-api';
 
 export async function POST(request: NextRequest) {
   try {
-    const { user, supabase } = await getAuthUser(request);
-    if (!user) {
+    const authResult = await getAuthUser(request);
+    if (!authResult.user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
     }
 
@@ -13,58 +14,82 @@ export async function POST(request: NextRequest) {
     const { prompt, style } = body;
 
     if (!prompt) {
-      return NextResponse.json({ error: '请输入提示词' }, { status: 400 });
+      return NextResponse.json({ error: '请输入音乐描述' }, { status: 400 });
     }
 
-    // Check credits (music costs 10)
+    const supabase = getSupabaseClient();
+
+    // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('credits, vip_level, daily_music_count')
-      .eq('user_id', user.id)
-      .maybeSingle();
+      .select('*')
+      .eq('user_id', authResult.user.id)
+      .single();
 
-    const cost = 10;
-    if (!profile || profile.credits < cost) {
-      return NextResponse.json({ error: '算力不足，请充值', needRecharge: true }, { status: 402 });
+    if (!profile) {
+      return NextResponse.json({ error: '用户资料不存在' }, { status: 404 });
     }
 
-    if (profile.vip_level === 'free' && profile.daily_music_count >= 3) {
-      return NextResponse.json({ error: '免费用户每日限3次音乐生成，升级VIP解锁更多', needVip: true }, { status: 403 });
+    // Check credits
+    const creditsCost = 10;
+    if (profile.credits < creditsCost) {
+      return NextResponse.json({ error: '算力不足，请充值', redirect: '/recharge' }, { status: 402 });
     }
 
-    const result = await CozeAPI.generateMusic({ prompt, style });
+    // Check daily limit for free users
+    const isVip = profile.vip_level && profile.vip_level !== 'free';
+    const today = new Date().toISOString().split('T')[0];
+    const lastDate = profile.daily_count_reset_date?.split('T')[0];
+    const dailyMusicCount = lastDate === today ? (profile.daily_music_count || 0) : 0;
+
+    if (!isVip && dailyMusicCount >= 3) {
+      return NextResponse.json({ error: '今日免费生成次数已用完，升级VIP可无限使用' }, { status: 403 });
+    }
+
+    // Generate music (returns text description from LLM)
+    const musicDescription = await generateMusic(prompt, style);
 
     // Deduct credits
-    const newCredits = profile.credits - cost;
-    await supabase.from('profiles').update({
-      credits: newCredits,
-      daily_music_count: profile.daily_music_count + 1,
-    }).eq('user_id', user.id);
+    const newCredits = profile.credits - creditsCost;
+    const newDailyCount = dailyMusicCount + 1;
 
+    await supabase
+      .from('profiles')
+      .update({
+        credits: newCredits,
+        daily_music_count: newDailyCount,
+        daily_count_reset_date: lastDate === today ? profile.daily_count_reset_date : new Date().toISOString(),
+      })
+      .eq('user_id', authResult.user.id);
+
+    // Record credits transaction
     await supabase.from('credits_transactions').insert({
-      user_id: user.id,
-      amount: -cost,
+      user_id: authResult.user.id,
+      amount: -creditsCost,
       balance_after: newCredits,
       type: 'consumption',
-      description: `AI音乐生成消耗${cost}算力`,
+      description: `AI音乐 - ${style || '通用'}`,
     });
 
-    if (result.audio_url) {
-      await supabase.from('user_works').insert({
-        user_id: user.id,
-        title: prompt.slice(0, 50),
-        work_type: 'audio',
-        file_url: result.audio_url,
-        thumbnail_url: '',
-        prompt,
-        credits_cost: cost,
-        metadata: { style, lyrics: result.lyrics },
-      });
-    }
+    // Save work
+    await supabase.from('user_works').insert({
+      user_id: authResult.user.id,
+      work_type: 'music',
+      file_url: '',
+      prompt: prompt,
+      credits_cost: creditsCost,
+      metadata: { description: musicDescription, style },
+    });
 
-    return NextResponse.json({ ...result, remaining_credits: newCredits });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : '音乐生成失败';
+    return NextResponse.json({
+      description: musicDescription,
+      style: style || '通用',
+      credits_cost: creditsCost,
+      remaining_credits: newCredits,
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : '生成失败';
+    console.error('AI music generation error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
