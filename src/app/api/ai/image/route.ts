@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateImage } from '@/lib/coze-api';
 import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
+import { getSupabaseClient } from '@/storage/database/supabase-client';
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,10 +12,29 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { prompt, size, image_urls, mode, imageCount } = body;
+    const { prompt, size, image_urls, mode, imageCount, model_endpoint } = body;
 
     if (!prompt && !image_urls?.length) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
+    }
+
+    // 校验模型Endpoint ID
+    if (!model_endpoint) {
+      return NextResponse.json({ error: '请选择有效的生成模型' }, { status: 400 });
+    }
+
+    // 验证模型是否存在于数据库且为image类型
+    const adminClient = getSupabaseClient();
+    const { data: modelData, error: modelError } = await adminClient
+      .from('ai_models')
+      .select('endpoint_id, name')
+      .eq('endpoint_id', model_endpoint)
+      .eq('category', 'image')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (modelError || !modelData) {
+      return NextResponse.json({ error: '请选择有效的生成模型' }, { status: 400 });
     }
 
     const { supabase } = authResult;
@@ -36,7 +56,7 @@ export async function POST(request: NextRequest) {
     // ========== 2. 调用AI模型生成图片 ==========
     let generatedUrls: string[];
     try {
-      generatedUrls = await generateImage(prompt || '', size || '2K', image_urls);
+      generatedUrls = await generateImage(prompt || '', size || '2K', image_urls, model_endpoint);
     } catch (aiError: unknown) {
       // AI调用失败，退还已扣除的算力
       await refundCredits(supabase, authResult.user.id, deduction);
@@ -47,7 +67,7 @@ export async function POST(request: NextRequest) {
         amount: creditsCost,
         balanceAfter: deduction.newTotalCredits,
         type: 'refund',
-        description: `AI生图失败退还(${count}张)`,
+        description: `AI生图失败退还(${count}张) - 模型:${model_endpoint}`,
         creditsType: 'refund',
       });
 
@@ -66,7 +86,7 @@ export async function POST(request: NextRequest) {
       amount: -creditsCost,
       balanceAfter: deduction.newTotalCredits,
       type: 'consumption',
-      description: `AI生图(${count}张) - ${mode || 'text2img'}`,
+      description: `AI生图(${count}张) - ${mode || 'text2img'} - 模型:${model_endpoint}`,
       creditsType,
     });
 

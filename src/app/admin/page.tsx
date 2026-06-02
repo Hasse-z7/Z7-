@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Users, CreditCard, Zap, Download, Shield
+  Users, CreditCard, Zap, Download, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon
 } from 'lucide-react';
 
 interface Profile {
@@ -31,6 +31,16 @@ interface Order {
   created_at: string;
 }
 
+interface AIModel {
+  id: string;
+  name: string;
+  endpoint_id: string;
+  category: string;
+  is_active: boolean;
+  sort_order: number;
+  description: string;
+}
+
 export default function AdminPage() {
   const { profile, user } = useAuth();
   const router = useRouter();
@@ -38,6 +48,20 @@ export default function AdminPage() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [credits, setCredits] = useState<Record<string, unknown>[]>([]);
+  const [models, setModels] = useState<AIModel[]>([]);
+  const [showModelForm, setShowModelForm] = useState(false);
+  const [editingModel, setEditingModel] = useState<AIModel | null>(null);
+  const [modelForm, setModelForm] = useState({ name: '', endpoint_id: '', category: 'video', description: '' });
+
+  const fetchModels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/models', { credentials: 'include', headers: { ...getAuthHeaders() } });
+      const data = await res.json();
+      if (data.models) setModels(data.models);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
 
   const fetchData = useCallback(async () => {
     if (!user || !profile?.is_admin) return;
@@ -64,7 +88,8 @@ export default function AdminPage() {
       return;
     }
     fetchData();
-  }, [profile, router, fetchData]);
+    fetchModels();
+  }, [profile, router, fetchData, fetchModels]);
 
   if (!profile?.is_admin) {
     return (
@@ -132,6 +157,7 @@ export default function AdminPage() {
             <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" />用户</TabsTrigger>
             <TabsTrigger value="orders"><CreditCard className="w-4 h-4 mr-1" />订单</TabsTrigger>
             <TabsTrigger value="credits"><Zap className="w-4 h-4 mr-1" />算力</TabsTrigger>
+            <TabsTrigger value="models"><Cpu className="w-4 h-4 mr-1" />模型</TabsTrigger>
           </TabsList>
 
           <div className="mt-6 overflow-x-auto">
@@ -218,6 +244,110 @@ export default function AdminPage() {
                   ))}
                 </tbody>
               </table>
+            )}
+
+            {tab === 'models' && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">管理AI生图/生视频可选模型，新增后自动同步至前端下拉选择框</p>
+                  <Button size="sm" onClick={() => { setEditingModel(null); setModelForm({ name: '', endpoint_id: '', category: 'video', description: '' }); setShowModelForm(true); }}>
+                    <Plus className="w-4 h-4 mr-1" />新增模型
+                  </Button>
+                </div>
+
+                {showModelForm && (
+                  <Card className="border-cyan-500/30">
+                    <CardContent className="p-4 space-y-3">
+                      <h3 className="font-medium">{editingModel ? '编辑模型' : '新增模型'}</h3>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-muted-foreground">模型名称</label>
+                          <input className="w-full mt-1 px-3 py-2 rounded-md border border-border bg-background text-sm" placeholder="如：Seedance 1.5 Pro" value={modelForm.name} onChange={e => setModelForm(f => ({ ...f, name: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">模型Endpoint ID</label>
+                          <input className="w-full mt-1 px-3 py-2 rounded-md border border-border bg-background text-sm font-mono" placeholder="如：ark-xxxx 或 doubao-xxxx" value={modelForm.endpoint_id} onChange={e => setModelForm(f => ({ ...f, endpoint_id: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">类型</label>
+                          <select className="w-full mt-1 px-3 py-2 rounded-md border border-border bg-background text-sm" value={modelForm.category} onChange={e => setModelForm(f => ({ ...f, category: e.target.value }))}>
+                            <option value="video">视频生成</option>
+                            <option value="image">图片生成</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">描述</label>
+                          <input className="w-full mt-1 px-3 py-2 rounded-md border border-border bg-background text-sm" placeholder="模型描述（可选）" value={modelForm.description} onChange={e => setModelForm(f => ({ ...f, description: e.target.value }))} />
+                        </div>
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="outline" size="sm" onClick={() => setShowModelForm(false)}><XIcon className="w-4 h-4 mr-1" />取消</Button>
+                        <Button size="sm" onClick={async () => {
+                          if (!modelForm.name.trim() || !modelForm.endpoint_id.trim()) return;
+                          const url = editingModel ? `/api/models?id=${editingModel.id}` : '/api/models';
+                          const method = editingModel ? 'PUT' : 'POST';
+                          const res = await fetch(url, {
+                            method,
+                            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                            body: JSON.stringify(modelForm),
+                          });
+                          if (res.ok) {
+                            setShowModelForm(false);
+                            fetchModels();
+                          }
+                        }}><Check className="w-4 h-4 mr-1" />{editingModel ? '保存' : '新增'}</Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-3 px-4">模型名称</th>
+                      <th className="text-left py-3 px-4">Endpoint ID</th>
+                      <th className="text-left py-3 px-4">类型</th>
+                      <th className="text-left py-3 px-4">状态</th>
+                      <th className="text-left py-3 px-4">描述</th>
+                      <th className="text-left py-3 px-4">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {models.map((m) => (
+                      <tr key={m.id} className="border-b border-border/50 hover:bg-muted/50">
+                        <td className="py-3 px-4 font-medium">{m.name}</td>
+                        <td className="py-3 px-4 font-mono text-xs text-cyan-400">{m.endpoint_id}</td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded text-xs ${m.category === 'video' ? 'bg-purple-500/10 text-purple-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                            {m.category === 'video' ? '视频' : '图片'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded text-xs ${m.is_active ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                            {m.is_active ? '启用' : '停用'}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-muted-foreground">{m.description || '-'}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => {
+                              setEditingModel(m);
+                              setModelForm({ name: m.name, endpoint_id: m.endpoint_id, category: m.category, description: m.description || '' });
+                              setShowModelForm(true);
+                            }}><Edit2 className="w-3 h-3" /></Button>
+                            <Button variant="ghost" size="sm" onClick={async () => {
+                              if (confirm('确定删除此模型？')) {
+                                await fetch(`/api/models?id=${m.id}`, { method: 'DELETE', headers: { ...getAuthHeaders() } });
+                                fetchModels();
+                              }
+                            }}><Trash2 className="w-3 h-3 text-red-400" /></Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </Tabs>

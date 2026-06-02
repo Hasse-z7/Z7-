@@ -33,6 +33,7 @@ export interface VideoTaskRequest {
   referenceImages?: string[]; // 参考图URL数组
   audioUrl?: string;       // MP3音频URL
   audioEnabled?: boolean;
+  modelEndpoint?: string;  // 模型接入点ID（从前端传来，覆盖默认值）
 }
 
 export interface ArkSubmitResponse {
@@ -310,7 +311,7 @@ function buildRequestBody(params: VideoTaskRequest): Record<string, unknown> {
   }
 
   const body: Record<string, unknown> = {
-    model: ARK_MODEL_ENDPOINT,
+    model: params.modelEndpoint || ARK_MODEL_ENDPOINT,
     content,
   };
 

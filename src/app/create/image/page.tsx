@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Wand2, ImageIcon, Upload, Download, Sparkles, Loader2,
-  Palette, Maximize2, Filter, X, Plus
+  Palette, Maximize2, Filter, X, Plus, ChevronDown
 } from 'lucide-react';
 
 interface Template {
@@ -21,6 +21,14 @@ interface Template {
   prompt_template: string;
   credits_cost: number;
   is_vip_only: boolean;
+}
+
+interface AIModel {
+  id: string;
+  name: string;
+  endpoint_id: string;
+  category: string;
+  description: string;
 }
 
 const styleCards = [
@@ -75,6 +83,8 @@ export default function CreateImagePage() {
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const MAX_REF_IMAGES = 12;
+  const [models, setModels] = useState<AIModel[]>([]);
+  const [selectedModelEndpoint, setSelectedModelEndpoint] = useState<string>('');
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -86,7 +96,26 @@ export default function CreateImagePage() {
     }
   }, []);
 
-  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+  const fetchModels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/models?category=image');
+      const data = await res.json();
+      if (data.models) {
+        setModels(data.models);
+        // 恢复上次选择的模型
+        const saved = localStorage.getItem('selected_image_model');
+        if (saved && data.models.some((m: AIModel) => m.endpoint_id === saved)) {
+          setSelectedModelEndpoint(saved);
+        } else if (data.models.length > 0) {
+          setSelectedModelEndpoint(data.models[0].endpoint_id);
+        }
+      }
+    } catch (err) {
+      console.error('Fetch models error:', err);
+    }
+  }, []);
+
+  useEffect(() => { fetchTemplates(); fetchModels(); }, [fetchTemplates, fetchModels]);
 
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
@@ -118,7 +147,7 @@ export default function CreateImagePage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, size: `${calculatedWidth}*${calculatedHeight}` }),
+        body: JSON.stringify({ prompt, size: `${calculatedWidth}*${calculatedHeight}`, model_endpoint: selectedModelEndpoint }),
       });
       const data = await res.json();
       const imageUrl = data.image_urls?.[0] || data.image_url;
@@ -370,6 +399,40 @@ export default function CreateImagePage() {
 
           {/* Right: Parameters & Templates */}
           <div className="space-y-4">
+            {/* Model Selection */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">模型选择</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="relative">
+                  <select
+                    value={selectedModelEndpoint}
+                    onChange={(e) => {
+                      setSelectedModelEndpoint(e.target.value);
+                      localStorage.setItem('selected_image_model', e.target.value);
+                    }}
+                    className="w-full appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2.5 pr-10 text-sm text-foreground transition-colors hover:bg-muted focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  >
+                    {models.length === 0 && (
+                      <option value="">暂无可用模型</option>
+                    )}
+                    {models.map((m) => (
+                      <option key={m.endpoint_id} value={m.endpoint_id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+                {selectedModelEndpoint && (
+                  <p className="mt-1.5 text-xs text-muted-foreground truncate">
+                    {selectedModelEndpoint}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Resolution Panel */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">

@@ -14,6 +14,48 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { deductCredits, recordTransaction, CREDITS_PER_SECOND } from '@/lib/credits-helpers';
 import { isCircuitBreakerOpen } from '@/lib/ark-config';
+import { createClient } from '@supabase/supabase-js';
+
+/** 获取模型接入点ID：从前端传来的model_id查询数据库，无效则报错 */
+async function resolveModelEndpoint(modelId: string | undefined, category: string): Promise<{ endpointId: string; modelName: string }> {
+  // 未传model_id，返回错误
+  if (!modelId) {
+    throw new Error('请选择有效的生成模型');
+  }
+
+  const supabase = createClient(
+    process.env.COZE_SUPABASE_URL!,
+    process.env.COZE_SUPABASE_SERVICE_ROLE_KEY!,
+  );
+
+  // 先按 id (UUID) 查找
+  const { data: byId } = await supabase
+    .from('ai_models')
+    .select('endpoint_id, name, category, is_active')
+    .eq('id', modelId)
+    .maybeSingle();
+
+  if (byId) {
+    if (!byId.is_active) throw new Error('该模型已停用，请选择其他模型');
+    if (byId.category !== category) throw new Error('该模型不适用于当前功能');
+    return { endpointId: byId.endpoint_id, modelName: byId.name };
+  }
+
+  // 再按 endpoint_id 精确查找
+  const { data: byEndpoint } = await supabase
+    .from('ai_models')
+    .select('endpoint_id, name, category, is_active')
+    .eq('endpoint_id', modelId)
+    .maybeSingle();
+
+  if (byEndpoint) {
+    if (!byEndpoint.is_active) throw new Error('该模型已停用，请选择其他模型');
+    if (byEndpoint.category !== category) throw new Error('该模型不适用于当前功能');
+    return { endpointId: byEndpoint.endpoint_id, modelName: byEndpoint.name };
+  }
+
+  throw new Error('请选择有效的生成模型');
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -44,10 +86,23 @@ export async function POST(request: NextRequest) {
       resolution,
       audio,
       audio_url,
+      model_id,
     } = body;
 
     if (!prompt && !image_url && (!images || images.length === 0)) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
+    }
+
+    // ========== 2.5 校验模型ID ==========
+    let modelEndpoint: string;
+    let modelName: string;
+    try {
+      const resolved = await resolveModelEndpoint(model_id, 'video');
+      modelEndpoint = resolved.endpointId;
+      modelName = resolved.modelName;
+    } catch (modelError: unknown) {
+      const msg = modelError instanceof Error ? modelError.message : '请选择有效的生成模型';
+      return NextResponse.json({ error: msg }, { status: 400 });
     }
 
     const { supabase } = authResult;
@@ -92,6 +147,7 @@ export async function POST(request: NextRequest) {
         credits_cost: creditsCost,
         free_deducted: deduction.freeDeducted,
         paid_deducted: deduction.paidDeducted,
+        model_endpoint: modelEndpoint,
       })
       .select('id')
       .maybeSingle();
@@ -115,7 +171,7 @@ export async function POST(request: NextRequest) {
       amount: -creditsCost,
       balanceAfter: deduction.newTotalCredits,
       type: 'consumption',
-      description: `AI视频预扣(${videoDuration}秒) - 任务 ${task.id.slice(0, 8)}`,
+      description: `AI视频预扣(${videoDuration}秒) [${modelName}] - 任务 ${task.id.slice(0, 8)}`,
       creditsType,
       relatedId: task.id,
     });

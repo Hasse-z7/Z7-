@@ -25,6 +25,7 @@ export async function generateImage(
   prompt: string,
   size: string = '2K',
   imageUrls?: string[],
+  modelEndpoint?: string,
 ): Promise<string[]> {
   const client = new ImageGenerationClient(config);
 
@@ -33,6 +34,11 @@ export async function generateImage(
     size,
     watermark: false,
   };
+
+  // 使用前端传来的模型Endpoint，覆盖默认值
+  if (modelEndpoint) {
+    request.model = modelEndpoint;
+  }
 
   if (imageUrls && imageUrls.length > 0) {
     request.image = imageUrls.length === 1 ? imageUrls[0] : imageUrls;

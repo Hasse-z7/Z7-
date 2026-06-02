@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Film, Play, Upload, Download, Sparkles, Loader2, Video, Clapperboard, ZoomIn,
-  X, Plus, Music, PlayCircle, PauseCircle, Trash2
+  X, Plus, Music, PlayCircle, PauseCircle, Trash2, ChevronDown
 } from 'lucide-react';
 
 interface Template {
@@ -21,6 +21,14 @@ interface Template {
   prompt_template: string;
   credits_cost: number;
   is_vip_only: boolean;
+}
+
+interface AIModel {
+  id: string;
+  name: string;
+  endpoint_id: string;
+  category: string;
+  description: string;
 }
 
 const videoStyles = [
@@ -61,6 +69,10 @@ export default function CreateVideoPage() {
   const audioFileInputRef = useRef<HTMLInputElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
+  // Model selection
+  const [models, setModels] = useState<AIModel[]>([]);
+  const [selectedModelEndpoint, setSelectedModelEndpoint] = useState<string>('');
+
   const fetchTemplates = useCallback(async () => {
     try {
       const res = await fetch('/api/templates?category=video');
@@ -71,7 +83,26 @@ export default function CreateVideoPage() {
     }
   }, []);
 
-  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+  const fetchModels = useCallback(async () => {
+    try {
+      const res = await fetch('/api/models?category=video');
+      const data = await res.json();
+      if (data.models) {
+        setModels(data.models);
+        // 恢复上次选择的模型
+        const saved = localStorage.getItem('selected_video_model');
+        if (saved && data.models.some((m: AIModel) => m.endpoint_id === saved)) {
+          setSelectedModelEndpoint(saved);
+        } else if (data.models.length > 0) {
+          setSelectedModelEndpoint(data.models[0].endpoint_id);
+        }
+      }
+    } catch (err) {
+      console.error('Fetch models error:', err);
+    }
+  }, []);
+
+  useEffect(() => { fetchTemplates(); fetchModels(); }, [fetchTemplates, fetchModels]);
 
   // Multi-image upload handlers
   const addRefImages = (files: FileList | File[]) => {
@@ -197,7 +228,7 @@ export default function CreateVideoPage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio }),
+        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_endpoint: selectedModelEndpoint }),
       });
       const data = await res.json();
 
@@ -469,6 +500,40 @@ export default function CreateVideoPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Model Selection */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">模型选择</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="relative">
+                  <select
+                    value={selectedModelEndpoint}
+                    onChange={(e) => {
+                      setSelectedModelEndpoint(e.target.value);
+                      localStorage.setItem('selected_video_model', e.target.value);
+                    }}
+                    className="w-full appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2.5 pr-10 text-sm text-foreground transition-colors hover:bg-muted focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  >
+                    {models.length === 0 && (
+                      <option value="">暂无可用模型</option>
+                    )}
+                    {models.map((m) => (
+                      <option key={m.endpoint_id} value={m.endpoint_id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                </div>
+                {selectedModelEndpoint && (
+                  <p className="mt-1.5 text-xs text-muted-foreground truncate">
+                    {selectedModelEndpoint}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Video Ratio Panel */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">

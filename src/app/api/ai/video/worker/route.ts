@@ -117,6 +117,7 @@ async function processTask(taskId: string): Promise<void> {
         referenceImages: task.reference_images || [],
         audioUrl: task.audio_url || undefined,
         audioEnabled: task.audio_enabled,
+        modelEndpoint: task.model_endpoint || undefined,
       });
 
       arkTaskId = result.taskId;
