@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,9 +43,9 @@ export default function AdminPage() {
     if (!user || !profile?.is_admin) return;
     try {
       const [usersRes, ordersRes, creditsRes] = await Promise.all([
-        fetch(`/api/admin?tab=users`, { credentials: 'include' }),
-        fetch(`/api/admin?tab=orders`, { credentials: 'include' }),
-        fetch(`/api/admin?tab=credits`, { credentials: 'include' }),
+        fetch(`/api/admin?tab=users`, { credentials: 'include', headers: { ...getAuthHeaders() } }),
+        fetch(`/api/admin?tab=orders`, { credentials: 'include', headers: { ...getAuthHeaders() } }),
+        fetch(`/api/admin?tab=credits`, { credentials: 'include', headers: { ...getAuthHeaders() } }),
       ]);
       const [usersData, ordersData, creditsData] = await Promise.all([
         usersRes.json(), ordersRes.json(), creditsRes.json(),

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -190,6 +190,10 @@ export default function CreateVideoPage() {
       const res = await fetch('/api/ai/video', {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({ prompt, duration, ratio: videoRatio, quality: videoQuality, audio: generateAudio }),
       });
       const data = await res.json();
@@ -197,6 +201,10 @@ export default function CreateVideoPage() {
         setResultUrl(data.video_url);
         await fetch('/api/works', { credentials: 'include',
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify({
             title: prompt.slice(0, 50),
             work_type: 'video',

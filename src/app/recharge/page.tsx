@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -103,6 +103,7 @@ export default function RechargePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           package_id: selectedPackage.id,
@@ -130,6 +131,7 @@ export default function RechargePage() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({ order_id: currentOrder.id }),
       });

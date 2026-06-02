@@ -26,10 +26,11 @@ export async function POST(request: NextRequest) {
       .eq('user_id', data.user.id)
       .maybeSingle();
 
-    // Set session token in httpOnly cookie
+    // Set session token in httpOnly cookie (fallback for same-origin)
     const response = NextResponse.json({
       user: { id: data.user.id, email: data.user.email || '' },
       profile: profile || null,
+      access_token: data.session?.access_token || '',
     });
 
     if (data.session?.access_token) {

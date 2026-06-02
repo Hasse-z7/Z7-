@@ -51,10 +51,11 @@ export async function POST(request: NextRequest) {
       ? await supabase.from('profiles').select('*').eq('user_id', profileUserId).maybeSingle()
       : { data: null };
 
-    // Set session cookies
+    // Set session cookies (fallback for same-origin)
     const response = NextResponse.json({
       user: { id: data.user?.id || '', email: data.user?.email || '' },
       profile: profile || null,
+      access_token: data.session?.access_token || '',
     });
 
     if (data.session?.access_token) {

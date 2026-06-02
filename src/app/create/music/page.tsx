@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,6 +65,10 @@ export default function CreateMusicPage() {
       const res = await fetch('/api/ai/music', {
         method: 'POST',
         credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
         body: JSON.stringify({ prompt: prompt || lyrics, style: selectedStyle, lyrics }),
       });
       const data = await res.json();
@@ -73,6 +77,10 @@ export default function CreateMusicPage() {
         setResultLyrics(data.lyrics || '');
         await fetch('/api/works', { credentials: 'include',
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify({
             title: (prompt || lyrics).slice(0, 50),
             work_type: 'audio',

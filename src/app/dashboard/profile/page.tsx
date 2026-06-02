@@ -115,7 +115,7 @@ export default function ProfilePage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">到期时间</span>
-                <span>{profile?.vip_expires_at ? new Date(profile.vip_expires_at).toLocaleDateString() : '-'}</span>
+                <span>{profile?.vip_expire_at ? new Date(profile.vip_expire_at).toLocaleDateString() : '-'}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">剩余算力</span>

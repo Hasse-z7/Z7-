@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -30,7 +30,8 @@ export default function MyWorksPage() {
     if (!user) return;
     try {
       const res = await fetch(`/api/works?type=${filter}`, {
-        
+        credentials: 'include',
+        headers: { ...getAuthHeaders() },
       });
       const data = await res.json();
       if (data.works) setWorks(data.works);
@@ -46,7 +47,8 @@ export default function MyWorksPage() {
     try {
       await fetch(`/api/works?id=${id}`, {
         method: 'DELETE',
-        
+        credentials: 'include',
+        headers: { ...getAuthHeaders() },
       });
       setWorks(works.filter(w => w.id !== id));
     } catch {
