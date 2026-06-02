@@ -228,7 +228,7 @@ export default function CreateVideoPage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_endpoint: selectedModelEndpoint }),
+        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint }),
       });
       const data = await res.json();
 
