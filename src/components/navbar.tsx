@@ -66,7 +66,7 @@ export default function Navbar() {
             <Sparkles className="h-5 w-5 text-white" />
           </div>
           <span className="font-bold text-lg bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent hidden sm:inline">
-            AI创意工坊
+            燃冬AI
           </span>
         </Link>
 

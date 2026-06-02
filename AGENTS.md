@@ -1,4 +1,4 @@
-# AGENTS.md - AI创意工坊
+# AGENTS.md - 燃冬AI
 
 ## 项目概览
 

@@ -40,7 +40,7 @@ export default function Footer() {
           </div>
         </div>
         <div className="mt-8 pt-4 border-t border-border/40 text-center text-xs text-muted-foreground">
-          <p>&copy; 2025 AI创意工坊. All rights reserved.</p>
+          <p>&copy; 2025 燃冬AI. All rights reserved.</p>
           <p className="mt-1">线上经营请使用官方商户商业收款码，不建议个人收款码经营性收款</p>
         </div>
       </div>

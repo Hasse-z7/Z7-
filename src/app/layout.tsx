@@ -7,11 +7,11 @@ import Footer from '@/components/footer';
 
 export const metadata: Metadata = {
   title: {
-    default: 'AI创意工坊 - AI多媒体创作平台',
-    template: '%s | AI创意工坊',
+    default: '燃冬AI - AI多媒体创作平台',
+    template: '%s | 燃冬AI',
   },
   description: 'AI生图、AI视频、AI音乐，一站式AI多媒体创作平台，让创意触手可及。',
-  keywords: ['AI创作', 'AI生图', 'AI视频', 'AI音乐', 'AI创意工坊'],
+  keywords: ['AI创作', 'AI生图', 'AI视频', 'AI音乐', '燃冬AI'],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
