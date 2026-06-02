@@ -5,10 +5,8 @@ import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
   Wand2, ImageIcon, Upload, Download, Sparkles, Loader2,
@@ -34,6 +32,32 @@ const styleCards = [
   { id: '3d_cartoon', name: '3D卡通', icon: '🧸', desc: '3D渲染卡通' },
 ];
 
+const resolutionMap: Record<string, { base: number }> = {
+  '1K': { base: 512 },
+  '2K': { base: 1024 },
+  '4K': { base: 2048 },
+};
+
+const aspectRatioMap: Record<string, [number, number]> = {
+  '自适应': [1, 1],
+  '1:1': [1, 1],
+  '9:16': [9, 16],
+  '16:9': [16, 9],
+  '3:4': [3, 4],
+  '4:3': [4, 3],
+  '3:2': [3, 2],
+  '2:3': [2, 3],
+  '4:5': [4, 5],
+  '5:4': [5, 4],
+  '21:9': [21, 9],
+};
+
+const imageRatios = [
+  ['自适应', '1:1', '9:16', '16:9', '3:4'],
+  ['4:3', '3:2', '2:3', '4:5', '5:4'],
+  ['21:9'],
+];
+
 export default function CreateImagePage() {
   const { profile, user } = useAuth();
   const router = useRouter();
@@ -45,6 +69,8 @@ export default function CreateImagePage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [width, setWidth] = useState(1024);
   const [height, setHeight] = useState(1024);
+  const [resolution, setResolution] = useState<'1K' | '2K' | '4K'>('2K');
+  const [aspectRatio, setAspectRatio] = useState<string>('自适应');
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -62,6 +88,15 @@ export default function CreateImagePage() {
     if (!user) { router.push('/login'); return; }
     if (!prompt.trim()) return;
 
+    // Calculate dimensions from resolution + aspect ratio
+    const { base } = resolutionMap[resolution];
+    const [rw, rh] = aspectRatioMap[aspectRatio] || [1, 1];
+    const maxDim = base;
+    const calculatedWidth = rw >= rh ? maxDim : Math.round(maxDim * (rw / rh));
+    const calculatedHeight = rh >= rw ? maxDim : Math.round(maxDim * (rh / rw));
+    setWidth(calculatedWidth);
+    setHeight(calculatedHeight);
+
     // Check credits
     const cost = mode === 'hd_fix' ? 8 : 5;
     if ((profile?.credits || 0) < cost) {
@@ -77,7 +112,7 @@ export default function CreateImagePage() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ prompt, width, height }),
+        body: JSON.stringify({ prompt, width: calculatedWidth, height: calculatedHeight }),
       });
       const data = await res.json();
       if (data.image_url) {
@@ -174,16 +209,8 @@ export default function CreateImagePage() {
                   rows={4}
                   className="resize-none"
                 />
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">宽度</Label>
-                    <Input type="number" value={width} onChange={(e) => setWidth(Number(e.target.value))} className="w-24" />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">高度</Label>
-                    <Input type="number" value={height} onChange={(e) => setHeight(Number(e.target.value))} className="w-24" />
-                  </div>
-                  <div className="ml-auto text-sm text-muted-foreground">
+                <div className="flex items-center justify-end">
+                  <div className="text-sm text-muted-foreground">
                     消耗 <span className="text-cyan-400 font-bold">{mode === 'hd_fix' ? 8 : 5}</span> 算力
                   </div>
                 </div>
@@ -218,8 +245,58 @@ export default function CreateImagePage() {
             )}
           </div>
 
-          {/* Right: Templates */}
+          {/* Right: Parameters & Templates */}
           <div className="space-y-4">
+            {/* Resolution Panel */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">分辨率</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  {(['1K', '2K', '4K'] as const).map((res) => (
+                    <button
+                      key={res}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                        resolution === res
+                          ? 'bg-violet-500 text-white shadow-md shadow-violet-500/25'
+                          : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                      onClick={() => setResolution(res)}
+                    >
+                      {res}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Aspect Ratio Panel */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">画面比例</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {imageRatios.map((row, rowIdx) => (
+                  <div key={rowIdx} className="flex gap-2">
+                    {row.map((ratio) => (
+                      <button
+                        key={ratio}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-medium transition-all ${
+                          aspectRatio === ratio
+                            ? 'bg-violet-500 text-white shadow-md shadow-violet-500/25'
+                            : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
+                        onClick={() => setAspectRatio(ratio)}
+                      >
+                        {ratio}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
             <h3 className="text-lg font-semibold">推荐模板</h3>
             {templates.map((tpl) => (
               <Card

@@ -30,6 +30,11 @@ const videoStyles = [
   { id: 'landscape', name: '风景大片', icon: '🌄', desc: '自然风光' },
 ];
 
+const videoRatios = [
+  ['Auto', '16:9', '4:3', '1:1', '3:4'],
+  ['9:16', '21:9'],
+];
+
 export default function CreateVideoPage() {
   const { profile, user } = useAuth();
   const router = useRouter();
@@ -40,6 +45,9 @@ export default function CreateVideoPage() {
   const [loading, setLoading] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
+  const [videoRatio, setVideoRatio] = useState<string>('16:9');
+  const [videoQuality, setVideoQuality] = useState<'480P' | '720P' | '1080P'>('720P');
+  const [generateAudio, setGenerateAudio] = useState(true);
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -63,7 +71,7 @@ export default function CreateVideoPage() {
     try {
       const res = await fetch('/api/ai/video', {
         method: 'POST',
-        body: JSON.stringify({ prompt, image_url: imageUrl, duration }),
+        body: JSON.stringify({ prompt, image_url: imageUrl, duration, ratio: videoRatio, quality: videoQuality, audio: generateAudio }),
       });
       const data = await res.json();
       if (data.video_url) {
@@ -131,12 +139,8 @@ export default function CreateVideoPage() {
                     />
                   </div>
                 )}
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <Label className="text-sm">时长(秒)</Label>
-                    <Input type="number" min={3} max={30} value={duration} onChange={(e) => setDuration(Number(e.target.value))} className="w-24" />
-                  </div>
-                  <div className="ml-auto text-sm text-muted-foreground">
+                <div className="flex items-center justify-end">
+                  <div className="text-sm text-muted-foreground">
                     消耗 <span className="text-cyan-400 font-bold">{mode === 'enhance' ? 15 : mode === 'extend' ? 20 : 25}</span> 算力
                   </div>
                 </div>
@@ -167,6 +171,105 @@ export default function CreateVideoPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Video Ratio Panel */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">比例</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {videoRatios.map((row, rowIdx) => (
+                  <div key={rowIdx} className="flex gap-2">
+                    {row.map((ratio) => (
+                      <button
+                        key={ratio}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-medium transition-all ${
+                          videoRatio === ratio
+                            ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/25'
+                            : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                        }`}
+                        onClick={() => setVideoRatio(ratio)}
+                      >
+                        {ratio}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+
+            {/* Video Quality Panel */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">清晰度</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  {(['480P', '720P', '1080P'] as const).map((q) => (
+                    <button
+                      key={q}
+                      className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                        videoQuality === q
+                          ? 'bg-cyan-500 text-white shadow-md shadow-cyan-500/25'
+                          : 'bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground'
+                      }`}
+                      onClick={() => setVideoQuality(q)}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Duration Slider */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">视频时长</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <input
+                    type="range"
+                    min={3}
+                    max={15}
+                    step={1}
+                    value={duration}
+                    onChange={(e) => setDuration(Number(e.target.value))}
+                    className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-muted accent-cyan-500"
+                  />
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>3秒</span>
+                    <span className="text-cyan-400 font-bold text-sm">{duration}秒</span>
+                    <span>15秒</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Audio Toggle */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">生成音频</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">为视频添加背景音频</span>
+                  <button
+                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                      generateAudio ? 'bg-cyan-500' : 'bg-muted'
+                    }`}
+                    onClick={() => setGenerateAudio(!generateAudio)}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                        generateAudio ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </CardContent>
+            </Card>
+
             <h3 className="text-lg font-semibold">视频模板</h3>
             {templates.map((tpl) => (
               <Card
