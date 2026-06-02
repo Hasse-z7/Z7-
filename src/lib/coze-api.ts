@@ -65,6 +65,7 @@ export async function generateVideo(
     resolution?: string;
     ratio?: string;
     generateAudio?: boolean;
+    modelEndpoint?: string;
   },
 ): Promise<{ videoUrl: string; lastFrameUrl?: string }> {
   const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
@@ -85,7 +86,7 @@ export async function generateVideo(
 
   // Build video generation options matching SDK signature exactly
   const videoOptions: Record<string, unknown> = {
-    model: 'doubao-seedance-1-5-pro-251215',
+    model: options.modelEndpoint || 'doubao-seedance-1-5-pro-251215',
     duration: options.duration || 5,
     watermark: false,
     generateAudio: options.generateAudio ?? true,
