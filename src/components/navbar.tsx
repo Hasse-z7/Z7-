@@ -62,9 +62,7 @@ export default function Navbar() {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-            <Sparkles className="h-5 w-5 text-white" />
-          </div>
+          <img src="/icon.jpg" alt="燃冬AI" className="h-8 w-8 rounded-lg object-cover" />
           <span className="font-bold text-lg bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent hidden sm:inline">
             燃冬AI
           </span>
