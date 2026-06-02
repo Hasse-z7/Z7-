@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Wand2, ImageIcon, Upload, Download, Sparkles, Loader2,
-  Palette, Maximize2, Filter
+  Palette, Maximize2, Filter, X, Plus
 } from 'lucide-react';
 
 interface Template {
@@ -71,6 +71,10 @@ export default function CreateImagePage() {
   const [height, setHeight] = useState(1024);
   const [resolution, setResolution] = useState<'1K' | '2K' | '4K'>('2K');
   const [aspectRatio, setAspectRatio] = useState<string>('自适应');
+  const [refImages, setRefImages] = useState<{ file: File; preview: string }[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const MAX_REF_IMAGES = 12;
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -142,6 +146,53 @@ export default function CreateImagePage() {
     }
   };
 
+  const addRefImages = (files: FileList | File[]) => {
+    const fileArr = Array.from(files).filter(f => f.type.startsWith('image/'));
+    const remaining = MAX_REF_IMAGES - refImages.length;
+    if (remaining <= 0) {
+      alert(`最多上传 ${MAX_REF_IMAGES} 张参考图`);
+      return;
+    }
+    const toAdd = fileArr.slice(0, remaining);
+    if (fileArr.length > remaining) {
+      alert(`已超出数量限制，仅添加前 ${remaining} 张`);
+    }
+    const newItems = toAdd.map(file => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+    setRefImages(prev => [...prev, ...newItems]);
+  };
+
+  const removeRefImage = (index: number) => {
+    setRefImages(prev => {
+      const item = prev[index];
+      URL.revokeObjectURL(item.preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+    if (e.dataTransfer.files.length > 0) {
+      addRefImages(e.dataTransfer.files);
+    }
+  };
+
   const handleSelectTemplate = (tpl: Template) => {
     setPrompt(tpl.prompt_template);
     setSelectedStyle(tpl.sub_category);
@@ -194,6 +245,87 @@ export default function CreateImagePage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Image Upload for img2img / hd_fix / outpaint modes */}
+            {(mode === 'img2img' || mode === 'hd_fix' || mode === 'outpaint') && (
+              <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Upload className="w-4 h-4" />
+                    上传参考图
+                    <span className="text-xs font-normal text-muted-foreground ml-auto">
+                      {refImages.length}/{MAX_REF_IMAGES}
+                    </span>
+                  </CardTitle>
+                  <CardDescription>
+                    {mode === 'img2img' ? '上传参考图片，AI将基于参考图风格生成新图' :
+                     mode === 'hd_fix' ? '上传需要高清修复的图片' :
+                     '上传需要扩图的原图'}
+                    ，最多 {MAX_REF_IMAGES} 张，支持拖拽批量上传
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {/* Drag & Drop Zone */}
+                  <div
+                    className={`border-2 border-dashed rounded-xl p-6 text-center transition-all cursor-pointer ${
+                      dragOver
+                        ? 'border-violet-500 bg-violet-500/10'
+                        : 'border-border/50 hover:border-violet-500/40 hover:bg-muted/30'
+                    }`}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Plus className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      点击选择或拖拽图片到此处
+                    </p>
+                    <p className="text-xs text-muted-foreground/60 mt-1">
+                      支持 JPG/PNG/WebP，单次最多 {MAX_REF_IMAGES} 张
+                    </p>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => {
+                        if (e.target.files) addRefImages(e.target.files);
+                        e.target.value = '';
+                      }}
+                    />
+                  </div>
+
+                  {/* Thumbnail Grid */}
+                  {refImages.length > 0 && (
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
+                      {refImages.map((img, idx) => (
+                        <div
+                          key={idx}
+                          className="relative group aspect-square rounded-lg overflow-hidden border border-border/50"
+                        >
+                          <img
+                            src={img.preview}
+                            alt={`参考图 ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
+                            onClick={(e) => { e.stopPropagation(); removeRefImage(idx); }}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          <div className="absolute bottom-1 left-1 text-[10px] bg-black/60 text-white px-1 rounded">
+                            {idx + 1}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
 
             {/* Prompt Input */}
             <Card className="border-border/50">
