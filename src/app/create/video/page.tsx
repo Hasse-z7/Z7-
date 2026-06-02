@@ -189,6 +189,7 @@ export default function CreateVideoPage() {
     try {
       const res = await fetch('/api/ai/video', {
         method: 'POST',
+        credentials: 'include',
         body: JSON.stringify({ prompt, duration, ratio: videoRatio, quality: videoQuality, audio: generateAudio }),
       });
       const data = await res.json();

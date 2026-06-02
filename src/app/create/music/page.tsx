@@ -64,6 +64,7 @@ export default function CreateMusicPage() {
     try {
       const res = await fetch('/api/ai/music', {
         method: 'POST',
+        credentials: 'include',
         body: JSON.stringify({ prompt: prompt || lyrics, style: selectedStyle, lyrics }),
       });
       const data = await res.json();

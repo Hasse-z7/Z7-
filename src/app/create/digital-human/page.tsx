@@ -68,6 +68,7 @@ export default function CreateDigitalHumanPage() {
     try {
       const res = await fetch('/api/ai/digital-human', {
         method: 'POST',
+        credentials: 'include',
         body: JSON.stringify({
           prompt,
           avatar_style: selectedAvatar,

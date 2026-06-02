@@ -113,6 +113,7 @@ export default function CreateImagePage() {
     try {
       const res = await fetch('/api/ai/image', {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
