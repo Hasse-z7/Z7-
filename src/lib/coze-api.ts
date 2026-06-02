@@ -11,6 +11,14 @@ import type { NextRequest } from 'next/server';
 // Shared config - API credentials auto-loaded from env vars
 const config = new Config();
 
+// Video SDK types (mirrored from coze-coding-dev-sdk/dist/types/video/models)
+type VideoResolution = '480p' | '720p' | '1080p';
+type VideoRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive';
+interface VideoImageURL { url: string }
+interface VideoImageURLContent { type: 'image_url'; image_url: VideoImageURL; role?: 'first_frame' | 'last_frame' | 'reference_image' }
+interface VideoTextContent { type: 'text'; text: string }
+type VideoContent = VideoTextContent | VideoImageURLContent;
+
 // ==================== AI Image Generation ====================
 
 export async function generateImage(
@@ -50,46 +58,54 @@ export async function generateVideo(
     duration?: number;
     resolution?: string;
     ratio?: string;
+    generateAudio?: boolean;
   },
 ): Promise<{ videoUrl: string; lastFrameUrl?: string }> {
   const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-  const client = new VideoGenerationClient(config, { customHeaders: customHeaders as unknown as string });
+  const client = new VideoGenerationClient(config, customHeaders as Record<string, string>);
 
-  // Build content array
-  const content: Array<{ type: 'text'; text: string } | { type: 'image'; imageUrl: string }> = [];
+  // Build content array - must match SDK Content type exactly
+  const content: VideoContent[] = [];
 
   if (options.prompt) {
     content.push({ type: 'text', text: options.prompt });
   }
   if (options.imageUrl) {
-    content.push({ type: 'image', imageUrl: options.imageUrl });
+    content.push({
+      type: 'image_url',
+      image_url: { url: options.imageUrl },
+    });
   }
 
-  // Build video generation options
+  // Build video generation options matching SDK signature exactly
   const videoOptions: Record<string, unknown> = {
     model: 'doubao-seedance-1-5-pro-251215',
     duration: options.duration || 5,
+    watermark: false,
+    generateAudio: options.generateAudio ?? true,
   };
 
-  if (options.resolution) {
+  if (options.resolution && ['480p', '720p', '1080p'].includes(options.resolution)) {
     videoOptions.resolution = options.resolution;
   }
   if (options.ratio && options.ratio !== 'auto') {
-    videoOptions.ratio = options.ratio;
+    const validRatios = ['16:9', '9:16', '1:1', '4:3', '3:4', '21:9', 'adaptive'];
+    if (validRatios.includes(options.ratio)) {
+      videoOptions.ratio = options.ratio;
+    }
   }
 
-  const response = await client.videoGeneration(
-    content as unknown as Parameters<typeof client.videoGeneration>[0],
-    videoOptions as unknown as Parameters<typeof client.videoGeneration>[1],
-  );
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const response = await client.videoGeneration(content as any, videoOptions as any);
 
   if (!response.videoUrl) {
-    throw new Error('视频生成失败，请稍后重试');
+    const errMsg = (response.response as unknown as Record<string, unknown>)?.error_message as string || '视频生成失败，请稍后重试';
+    throw new Error(errMsg);
   }
 
   return {
     videoUrl: response.videoUrl,
-    lastFrameUrl: (response as unknown as Record<string, unknown>).lastFrameUrl as string | undefined,
+    lastFrameUrl: response.lastFrameUrl || undefined,
   };
 }
 
@@ -129,7 +145,7 @@ export async function generateTTS(
   voiceType?: string,
 ): Promise<string> {
   const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-  const client = new TTSClient(config, { customHeaders: customHeaders as unknown as string });
+  const client = new TTSClient(config, customHeaders as Record<string, string>);
 
   const ttsRequest: Record<string, unknown> = {
     uid: `tts_${Date.now()}`,

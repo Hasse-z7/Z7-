@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { prompt, image_url, mode, duration, ratio, resolution } = body;
+    const { prompt, image_url, mode, duration, ratio, resolution, audio } = body;
 
     if (!prompt && !image_url) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
@@ -51,6 +51,7 @@ export async function POST(request: NextRequest) {
       duration: videoDuration,
       resolution: resolution || '720p',
       ratio: ratio || '16:9',
+      generateAudio: audio !== false,
     });
 
     // Deduct credits
