@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateVideo } from '@/lib/coze-api';
-
-// 算力消耗规则：3算力点/秒，按视频时长计算
-const CREDITS_PER_SECOND = 3;
+import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_SECOND } from '@/lib/credits-helpers';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,58 +17,67 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
     }
 
-    const supabase = getSupabaseClient();
-
-    // Get user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', authResult.user.id)
-      .single();
-
-    if (!profile) {
-      return NextResponse.json({ error: '用户资料不存在' }, { status: 404 });
-    }
+    const { supabase } = authResult;
 
     // 计算算力消耗：3点/秒 × 视频时长
     const videoDuration = duration || 5;
     const creditsCost = CREDITS_PER_SECOND * videoDuration;
 
-    if (profile.credits < creditsCost) {
+    // ========== 1. 先扣算力，再调用AI模型 ==========
+    const deduction = await deductCredits(supabase, authResult.user.id, creditsCost);
+
+    if (!deduction.success) {
       return NextResponse.json(
-        { error: '算力余额不足，请前往充值页面充值', redirect: '/recharge' },
-        { status: 402 }
+        { error: deduction.error, redirect: deduction.redirect },
+        { status: 402 },
       );
     }
 
-    // Generate video
-    const result = await generateVideo(request, {
-      prompt,
-      imageUrl: image_url,
-      duration: videoDuration,
-      resolution: resolution || '720p',
-      ratio: ratio || '16:9',
-      generateAudio: audio !== false,
-    });
+    // ========== 2. 调用AI模型生成视频 ==========
+    let result: { videoUrl: string; lastFrameUrl?: string };
+    try {
+      result = await generateVideo(request, {
+        prompt,
+        imageUrl: image_url,
+        duration: videoDuration,
+        resolution: resolution || '720p',
+        ratio: ratio || '16:9',
+        generateAudio: audio !== false,
+      });
+    } catch (aiError: unknown) {
+      // AI调用失败，退还已扣除的算力
+      await refundCredits(supabase, authResult.user.id, deduction);
 
-    // Deduct credits
-    const newCredits = profile.credits - creditsCost;
+      // 记录退还流水
+      await recordTransaction(supabase, {
+        userId: authResult.user.id,
+        amount: creditsCost,
+        balanceAfter: deduction.newTotalCredits,
+        type: 'refund',
+        description: `AI视频失败退还(${videoDuration}秒)`,
+        creditsType: 'refund',
+      });
 
-    await supabase
-      .from('profiles')
-      .update({ credits: newCredits })
-      .eq('user_id', authResult.user.id);
+      const message = aiError instanceof Error ? aiError.message : '生成失败';
+      console.error('AI video generation error:', message);
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
 
-    // Record credits transaction
-    await supabase.from('credits_transactions').insert({
-      user_id: authResult.user.id,
+    // ========== 3. 记录消耗流水 ==========
+    const creditsType = deduction.freeDeducted > 0 && deduction.paidDeducted > 0
+      ? 'mixed'
+      : deduction.freeDeducted > 0 ? 'free' : 'paid';
+
+    await recordTransaction(supabase, {
+      userId: authResult.user.id,
       amount: -creditsCost,
-      balance_after: newCredits,
+      balanceAfter: deduction.newTotalCredits,
       type: 'consumption',
       description: `AI视频(${videoDuration}秒) - ${mode || 'text2video'}`,
+      creditsType,
     });
 
-    // Save work
+    // ========== 4. 保存作品 ==========
     if (result.videoUrl) {
       await supabase.from('user_works').insert({
         user_id: authResult.user.id,
@@ -86,7 +92,7 @@ export async function POST(request: NextRequest) {
       video_url: result.videoUrl,
       last_frame_url: result.lastFrameUrl,
       credits_cost: creditsCost,
-      remaining_credits: newCredits,
+      remaining_credits: deduction.newTotalCredits,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '生成失败';

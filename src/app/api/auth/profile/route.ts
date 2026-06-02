@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { addFreeCredits, DAILY_LOGIN_BONUS } from '@/lib/credits-helpers';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    // 每日登录赠送5算力点
+    // 每日登录赠送5算力点（写入free_credits）
     if (profile) {
       const today = new Date().toISOString().split('T')[0];
       const lastLogin = profile.last_login_at
@@ -33,25 +34,28 @@ export async function GET(request: NextRequest) {
         : null;
 
       if (lastLogin !== today) {
-        const newCredits = (profile.credits || 0) + 5;
+        try {
+          const { newTotalCredits } = await addFreeCredits(
+            supabase,
+            user.id,
+            DAILY_LOGIN_BONUS,
+            'daily_login',
+            '每日登录赠送5算力点',
+          );
 
-        await supabase
-          .from('profiles')
-          .update({ credits: newCredits, last_login_at: new Date().toISOString() })
-          .eq('user_id', user.id);
+          // 更新 last_login_at
+          await supabase
+            .from('profiles')
+            .update({ last_login_at: new Date().toISOString() })
+            .eq('user_id', user.id);
 
-        // 记录算力流水
-        await supabase.from('credits_transactions').insert({
-          user_id: user.id,
-          amount: 5,
-          balance_after: newCredits,
-          type: 'daily_login',
-          description: '每日登录赠送5算力点',
-        });
-
-        // 更新本地profile对象以返回最新数据
-        profile.credits = newCredits;
-        profile.last_login_at = new Date().toISOString();
+          // 更新本地profile对象以返回最新数据
+          profile.credits = newTotalCredits;
+          profile.free_credits = (profile.free_credits || 0) + DAILY_LOGIN_BONUS;
+          profile.last_login_at = new Date().toISOString();
+        } catch {
+          // 日志赠送失败不影响正常返回
+        }
       }
     }
 

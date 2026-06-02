@@ -1,10 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateImage } from '@/lib/coze-api';
-
-// 算力消耗规则：单张图消耗2算力点，批量按实际张数扣点
-const CREDITS_PER_IMAGE = 2;
+import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,51 +17,60 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
     }
 
-    const supabase = getSupabaseClient();
-
-    // Get user profile
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('user_id', authResult.user.id)
-      .single();
-
-    if (!profile) {
-      return NextResponse.json({ error: '用户资料不存在' }, { status: 404 });
-    }
+    const { supabase } = authResult;
 
     // 计算算力消耗：批量生成按实际张数扣点
     const count = imageCount || 1;
     const creditsCost = CREDITS_PER_IMAGE * count;
 
-    if (profile.credits < creditsCost) {
+    // ========== 1. 先扣算力，再调用AI模型 ==========
+    const deduction = await deductCredits(supabase, authResult.user.id, creditsCost);
+
+    if (!deduction.success) {
       return NextResponse.json(
-        { error: '算力余额不足，请前往充值页面充值', redirect: '/recharge' },
-        { status: 402 }
+        { error: deduction.error, redirect: deduction.redirect },
+        { status: 402 },
       );
     }
 
-    // Generate image
-    const generatedUrls = await generateImage(prompt || '', size || '2K', image_urls);
+    // ========== 2. 调用AI模型生成图片 ==========
+    let generatedUrls: string[];
+    try {
+      generatedUrls = await generateImage(prompt || '', size || '2K', image_urls);
+    } catch (aiError: unknown) {
+      // AI调用失败，退还已扣除的算力
+      await refundCredits(supabase, authResult.user.id, deduction);
 
-    // Deduct credits
-    const newCredits = profile.credits - creditsCost;
+      // 记录退还流水
+      await recordTransaction(supabase, {
+        userId: authResult.user.id,
+        amount: creditsCost,
+        balanceAfter: deduction.newTotalCredits,
+        type: 'refund',
+        description: `AI生图失败退还(${count}张)`,
+        creditsType: 'refund',
+      });
 
-    await supabase
-      .from('profiles')
-      .update({ credits: newCredits })
-      .eq('user_id', authResult.user.id);
+      const message = aiError instanceof Error ? aiError.message : '生成失败';
+      console.error('AI image generation error:', message);
+      return NextResponse.json({ error: message }, { status: 500 });
+    }
 
-    // Record credits transaction
-    await supabase.from('credits_transactions').insert({
-      user_id: authResult.user.id,
+    // ========== 3. 记录消耗流水 ==========
+    const creditsType = deduction.freeDeducted > 0 && deduction.paidDeducted > 0
+      ? 'mixed'
+      : deduction.freeDeducted > 0 ? 'free' : 'paid';
+
+    await recordTransaction(supabase, {
+      userId: authResult.user.id,
       amount: -creditsCost,
-      balance_after: newCredits,
+      balanceAfter: deduction.newTotalCredits,
       type: 'consumption',
       description: `AI生图(${count}张) - ${mode || 'text2img'}`,
+      creditsType,
     });
 
-    // Save work
+    // ========== 4. 保存作品 ==========
     if (generatedUrls[0]) {
       await supabase.from('user_works').insert({
         user_id: authResult.user.id,
@@ -78,7 +84,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       image_urls: generatedUrls,
       credits_cost: creditsCost,
-      remaining_credits: newCredits,
+      remaining_credits: deduction.newTotalCredits,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '生成失败';

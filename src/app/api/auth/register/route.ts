@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { REGISTER_BONUS } from '@/lib/credits-helpers';
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,13 +21,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    // Create profile
+    // Create profile with free_credits = 50 (registration bonus)
     const userId = data.user?.id;
     if (userId) {
       await supabase.from('profiles').insert({
         user_id: userId,
         nickname: nickname || email.split('@')[0],
-        credits: 50,
+        credits: REGISTER_BONUS,
+        free_credits: REGISTER_BONUS,
+        paid_credits: 0,
         vip_level: 'free',
         is_admin: false,
         daily_image_count: 0,
@@ -35,13 +38,14 @@ export async function POST(request: NextRequest) {
         daily_digital_count: 0,
       });
 
-      // Grant registration bonus
+      // Record registration bonus transaction
       await supabase.from('credits_transactions').insert({
         user_id: userId,
-        amount: 50,
-        balance_after: 50,
+        amount: REGISTER_BONUS,
+        balance_after: REGISTER_BONUS,
         type: 'register_bonus',
         description: '新人注册赠送50算力点',
+        credits_type: 'free',
       });
     }
 
