@@ -46,7 +46,7 @@ export default function Navbar() {
   const creditsDisplay = profile ? (
     <Badge variant="outline" className="hidden sm:flex items-center gap-1 border-cyan-500/50 text-cyan-400">
       <CreditCard className="h-3 w-3" />
-      {profile.credits} 算力
+      {profile.credits} 算力点
     </Badge>
   ) : null;
 

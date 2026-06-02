@@ -3,6 +3,9 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateImage } from '@/lib/coze-api';
 
+// 算力消耗规则：单张图消耗2算力点，批量按实际张数扣点
+const CREDITS_PER_IMAGE = 2;
+
 export async function POST(request: NextRequest) {
   try {
     const authResult = await getAuthUser(request);
@@ -11,7 +14,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { prompt, size, image_urls, mode } = body;
+    const { prompt, size, image_urls, mode, imageCount } = body;
 
     if (!prompt && !image_urls?.length) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
@@ -30,36 +33,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '用户资料不存在' }, { status: 404 });
     }
 
-    // Check credits
-    const creditsCost = 5;
+    // 计算算力消耗：批量生成按实际张数扣点
+    const count = imageCount || 1;
+    const creditsCost = CREDITS_PER_IMAGE * count;
+
     if (profile.credits < creditsCost) {
-      return NextResponse.json({ error: '算力不足，请充值', redirect: '/recharge' }, { status: 402 });
-    }
-
-    // Check daily limit for free users
-    const isVip = profile.vip_level && profile.vip_level !== 'free';
-    const today = new Date().toISOString().split('T')[0];
-    const lastDate = profile.daily_count_reset_date?.split('T')[0];
-    const dailyImageCount = lastDate === today ? (profile.daily_image_count || 0) : 0;
-
-    if (!isVip && dailyImageCount >= 3) {
-      return NextResponse.json({ error: '今日免费生成次数已用完，升级VIP可无限使用' }, { status: 403 });
+      return NextResponse.json(
+        { error: '算力余额不足，请前往充值页面充值', redirect: '/recharge' },
+        { status: 402 }
+      );
     }
 
     // Generate image
-    const imageUrls = await generateImage(prompt || '', size || '2K', image_urls);
+    const generatedUrls = await generateImage(prompt || '', size || '2K', image_urls);
 
     // Deduct credits
     const newCredits = profile.credits - creditsCost;
-    const newDailyCount = dailyImageCount + 1;
 
     await supabase
       .from('profiles')
-      .update({
-        credits: newCredits,
-        daily_image_count: newDailyCount,
-        daily_count_reset_date: lastDate === today ? profile.daily_count_reset_date : new Date().toISOString(),
-      })
+      .update({ credits: newCredits })
       .eq('user_id', authResult.user.id);
 
     // Record credits transaction
@@ -68,20 +61,22 @@ export async function POST(request: NextRequest) {
       amount: -creditsCost,
       balance_after: newCredits,
       type: 'consumption',
-      description: `AI生图 - ${mode || 'text2img'}`,
+      description: `AI生图(${count}张) - ${mode || 'text2img'}`,
     });
 
     // Save work
-    await supabase.from('user_works').insert({
-      user_id: authResult.user.id,
-      work_type: 'image',
-      file_url: imageUrls[0],
-      prompt: prompt || '',
-      credits_cost: creditsCost,
-    });
+    if (generatedUrls[0]) {
+      await supabase.from('user_works').insert({
+        user_id: authResult.user.id,
+        work_type: 'image',
+        file_url: generatedUrls[0],
+        prompt: prompt || '',
+        credits_cost: creditsCost,
+      });
+    }
 
     return NextResponse.json({
-      image_urls: imageUrls,
+      image_urls: generatedUrls,
       credits_cost: creditsCost,
       remaining_credits: newCredits,
     });

@@ -37,7 +37,7 @@ export default function ProfilePage() {
               <p className="text-muted-foreground mt-1">{user?.email}</p>
               <div className="flex items-center gap-3 mt-3 justify-center sm:justify-start">
                 <Badge variant="outline" className="text-cyan-400 border-cyan-400/30">
-                  <Zap className="w-3 h-3 mr-1" /> {profile?.credits || 0} 算力
+                  <Zap className="w-3 h-3 mr-1" /> {profile?.credits || 0} 算力点
                 </Badge>
                 <Badge variant="outline" className="text-amber-400 border-amber-400/30">
                   <Crown className="w-3 h-3 mr-1" /> {profile?.vip_level === 'free' ? '免费用户' : 'VIP会员'}
@@ -118,7 +118,7 @@ export default function ProfilePage() {
                 <span>{profile?.vip_expire_at ? new Date(profile.vip_expire_at).toLocaleDateString() : '-'}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">剩余算力</span>
+                <span className="text-muted-foreground">剩余算力点</span>
                 <span className="text-cyan-400 font-bold">{profile?.credits || 0}</span>
               </div>
             </CardContent>

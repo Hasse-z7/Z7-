@@ -56,7 +56,7 @@ export default function CreateMusicPage() {
 
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
-    const cost = selectedStyle === 'electronic' || selectedStyle === 'rap' ? 15 : 10;
+    const cost = 10;
     if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
 
     setLoading(true);
@@ -150,7 +150,7 @@ export default function CreateMusicPage() {
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-sm text-muted-foreground">
-                    消耗 <span className="text-cyan-400 font-bold">{selectedStyle === 'electronic' || selectedStyle === 'rap' ? 15 : 10}</span> 算力
+                    消耗 <span className="text-cyan-400 font-bold">10</span> 算力点
                   </span>
                 </div>
                 <Button
@@ -207,7 +207,7 @@ export default function CreateMusicPage() {
                     </div>
                     {tpl.is_vip_only && <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs shrink-0 ml-2">VIP</Badge>}
                   </div>
-                  <div className="text-xs text-cyan-400 mt-2">{tpl.credits_cost} 算力</div>
+                  <div className="text-xs text-cyan-400 mt-2">{tpl.credits_cost} 算力点</div>
                 </CardContent>
               </Card>
             ))}

@@ -150,7 +150,7 @@ export default function AdminPage() {
                   {users.map((u) => (
                     <tr key={u.id} className="border-b border-border/50 hover:bg-muted/50">
                       <td className="py-3 px-4">{u.nickname}</td>
-                      <td className="py-3 px-4 text-cyan-400">{u.credits}</td>
+                      <td className="py-3 px-4 text-cyan-400">{u.credits} 算力点</td>
                       <td className="py-3 px-4">{u.vip_level}</td>
                       <td className="py-3 px-4">{u.vip_expires_at ? new Date(u.vip_expires_at).toLocaleDateString() : '-'}</td>
                       <td className="py-3 px-4">{new Date(u.created_at).toLocaleDateString()}</td>

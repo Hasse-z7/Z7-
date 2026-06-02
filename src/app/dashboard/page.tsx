@@ -79,7 +79,7 @@ export default function DashboardPage() {
               <div className="flex items-center justify-center gap-6 pt-4">
                 <div className="flex items-center gap-2 text-sm">
                   <Zap className="w-4 h-4 text-cyan-400" />
-                  <span className="text-muted-foreground">算力:</span>
+                  <span className="text-muted-foreground">算力点:</span>
                   <span className="font-bold text-cyan-400">{profile.credits}</span>
                 </div>
                 <div className="flex items-center gap-2 text-sm">
@@ -162,9 +162,9 @@ export default function DashboardPage() {
           <CardContent className="relative p-8 sm:p-12 flex flex-col sm:flex-row items-center gap-6">
             <div className="flex-1 text-center sm:text-left">
               <h3 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                充值算力，解锁更多创作可能
+                充值算力点，解锁更多创作可能
               </h3>
-              <p className="text-muted-foreground mt-2">首充额外赠送算力，VIP会员享受专属折扣与高清模板</p>
+              <p className="text-muted-foreground mt-2">首充额外赠送算力点，VIP会员享受专属折扣与高清模板</p>
             </div>
             <Link href="/recharge">
               <Button size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium px-8">

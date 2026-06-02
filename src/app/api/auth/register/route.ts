@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       await supabase.from('profiles').insert({
         user_id: userId,
         nickname: nickname || email.split('@')[0],
-        credits: 10,
+        credits: 50,
         vip_level: 'free',
         is_admin: false,
         daily_image_count: 0,
@@ -38,10 +38,10 @@ export async function POST(request: NextRequest) {
       // Grant registration bonus
       await supabase.from('credits_transactions').insert({
         user_id: userId,
-        amount: 10,
-        balance_after: 10,
+        amount: 50,
+        balance_after: 50,
         type: 'register_bonus',
-        description: '新人注册赠送10算力',
+        description: '新人注册赠送50算力点',
       });
     }
 

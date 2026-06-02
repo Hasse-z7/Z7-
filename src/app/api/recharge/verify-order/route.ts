@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (order.status === 'completed') {
-      return NextResponse.json({ error: '订单已核验完成' }, { status: 400 });
+      return NextResponse.json({ error: '订单已核验完成，请勿重复操作' }, { status: 400 });
     }
 
     // Mark order as completed (manual verification)
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     // Get current profile
     const { data: profile } = await supabase
       .from('profiles')
-      .select('credits, vip_level, vip_expires_at')
+      .select('credits, vip_level, vip_expire_at')
       .eq('user_id', user.id)
       .maybeSingle();
 
@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '用户信息异常' }, { status: 500 });
     }
 
-    // Add credits
+    // Add credits (订单中credits字段已包含赠送算力)
     const newCredits = profile.credits + order.credits;
     await supabase.from('profiles').update({ credits: newCredits }).eq('user_id', user.id);
 
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
       amount: order.credits,
       balance_after: newCredits,
       type: 'recharge',
-      description: `充值${order.credits}算力 - ${order.package_name}`,
+      description: `充值${order.credits}算力点 - ${order.package_name}`,
       order_id: order.id,
     });
 
@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (pkg?.duration_days && pkg.duration_days > 0) {
-        const currentExpiry = profile.vip_expires_at ? new Date(profile.vip_expires_at) : new Date();
+        const currentExpiry = profile.vip_expire_at ? new Date(profile.vip_expire_at) : new Date();
         const baseDate = currentExpiry > new Date() ? currentExpiry : new Date();
         const newExpiry = new Date(baseDate.getTime() + pkg.duration_days * 24 * 60 * 60 * 1000);
 
@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      message: `充值成功！已到账 ${order.credits} 算力点`,
       credits_added: order.credits,
       new_balance: newCredits,
     });

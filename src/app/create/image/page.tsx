@@ -101,8 +101,8 @@ export default function CreateImagePage() {
     setWidth(calculatedWidth);
     setHeight(calculatedHeight);
 
-    // Check credits
-    const cost = mode === 'hd_fix' ? 8 : 5;
+    // Check credits: 2算力点/张
+    const cost = 2;
     if ((profile?.credits || 0) < cost) {
       router.push('/recharge');
       return;
@@ -334,7 +334,7 @@ export default function CreateImagePage() {
                 />
                 <div className="flex items-center justify-end">
                   <div className="text-sm text-muted-foreground">
-                    消耗 <span className="text-cyan-400 font-bold">{mode === 'hd_fix' ? 8 : 5}</span> 算力
+                    消耗 <span className="text-cyan-400 font-bold">2</span> 算力点/张
                   </div>
                 </div>
                 <Button
@@ -437,7 +437,7 @@ export default function CreateImagePage() {
                       <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs shrink-0 ml-2">VIP</Badge>
                     )}
                   </div>
-                  <div className="text-xs text-cyan-400 mt-2">{tpl.credits_cost} 算力</div>
+                  <div className="text-xs text-cyan-400 mt-2">{tpl.credits_cost} 算力点</div>
                 </CardContent>
               </Card>
             ))}

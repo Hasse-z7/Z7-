@@ -3,6 +3,9 @@ import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateVideo } from '@/lib/coze-api';
 
+// 算力消耗规则：3算力点/秒，按视频时长计算
+const CREDITS_PER_SECOND = 3;
+
 export async function POST(request: NextRequest) {
   try {
     const authResult = await getAuthUser(request);
@@ -30,42 +33,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '用户资料不存在' }, { status: 404 });
     }
 
-    // Check credits
-    const creditsCost = 20;
+    // 计算算力消耗：3点/秒 × 视频时长
+    const videoDuration = duration || 5;
+    const creditsCost = CREDITS_PER_SECOND * videoDuration;
+
     if (profile.credits < creditsCost) {
-      return NextResponse.json({ error: '算力不足，请充值', redirect: '/recharge' }, { status: 402 });
-    }
-
-    // Check daily limit for free users
-    const isVip = profile.vip_level && profile.vip_level !== 'free';
-    const today = new Date().toISOString().split('T')[0];
-    const lastDate = profile.daily_count_reset_date?.split('T')[0];
-    const dailyVideoCount = lastDate === today ? (profile.daily_video_count || 0) : 0;
-
-    if (!isVip && dailyVideoCount >= 2) {
-      return NextResponse.json({ error: '今日免费生成次数已用完，升级VIP可无限使用' }, { status: 403 });
+      return NextResponse.json(
+        { error: '算力余额不足，请前往充值页面充值', redirect: '/recharge' },
+        { status: 402 }
+      );
     }
 
     // Generate video
     const result = await generateVideo(request, {
       prompt,
       imageUrl: image_url,
-      duration: duration || 5,
+      duration: videoDuration,
       resolution: resolution || '720p',
       ratio: ratio || '16:9',
     });
 
     // Deduct credits
     const newCredits = profile.credits - creditsCost;
-    const newDailyCount = dailyVideoCount + 1;
 
     await supabase
       .from('profiles')
-      .update({
-        credits: newCredits,
-        daily_video_count: newDailyCount,
-        daily_count_reset_date: lastDate === today ? profile.daily_count_reset_date : new Date().toISOString(),
-      })
+      .update({ credits: newCredits })
       .eq('user_id', authResult.user.id);
 
     // Record credits transaction
@@ -74,17 +67,19 @@ export async function POST(request: NextRequest) {
       amount: -creditsCost,
       balance_after: newCredits,
       type: 'consumption',
-      description: `AI视频 - ${mode || 'text2video'}`,
+      description: `AI视频(${videoDuration}秒) - ${mode || 'text2video'}`,
     });
 
     // Save work
-    await supabase.from('user_works').insert({
-      user_id: authResult.user.id,
-      work_type: 'video',
-      file_url: result.videoUrl,
-      prompt: prompt || '',
-      credits_cost: creditsCost,
-    });
+    if (result.videoUrl) {
+      await supabase.from('user_works').insert({
+        user_id: authResult.user.id,
+        work_type: 'video',
+        file_url: result.videoUrl,
+        prompt: prompt || '',
+        credits_cost: creditsCost,
+      });
+    }
 
     return NextResponse.json({
       video_url: result.videoUrl,

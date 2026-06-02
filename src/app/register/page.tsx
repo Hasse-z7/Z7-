@@ -64,7 +64,7 @@ export default function RegisterPage() {
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
             创建账号
           </CardTitle>
-          <CardDescription>注册即可获得10算力免费体验</CardDescription>
+          <CardDescription>注册即可获得50算力点免费体验</CardDescription>
         </CardHeader>
 
         <form onSubmit={handleSubmit}>
@@ -158,7 +158,7 @@ export default function RegisterPage() {
               disabled={loading}
             >
               {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-              {loading ? '注册中...' : '注册并领取10算力'}
+              {loading ? '注册中...' : '注册并领取50算力点'}
             </Button>
 
             <p className="text-sm text-muted-foreground">

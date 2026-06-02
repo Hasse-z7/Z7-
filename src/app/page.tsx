@@ -82,7 +82,7 @@ export default function HomePage() {
 
             {user && profile && (
               <div className="flex items-center justify-center gap-6 pt-4">
-                <span className="flex items-center gap-2 text-sm"><Zap className="w-4 h-4 text-cyan-400" /> 算力: <b className="text-cyan-400">{profile.credits}</b></span>
+                <span className="flex items-center gap-2 text-sm"><Zap className="w-4 h-4 text-cyan-400" /> 算力点: <b className="text-cyan-400">{profile.credits}</b></span>
                 <span className="flex items-center gap-2 text-sm"><Crown className="w-4 h-4 text-amber-400" /> 会员: <b className="text-amber-400">{profile.vip_level === 'free' ? '免费' : 'VIP'}</b></span>
               </div>
             )}
@@ -143,7 +143,7 @@ export default function HomePage() {
           <CardContent className="relative p-8 sm:p-12 flex flex-col sm:flex-row items-center gap-6">
             <div className="flex-1 text-center sm:text-left">
               <h3 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                新人注册即送10算力
+                新人注册即送50算力点
               </h3>
               <p className="text-muted-foreground mt-2">立即注册，免费体验AI生图、视频、音乐创作</p>
             </div>

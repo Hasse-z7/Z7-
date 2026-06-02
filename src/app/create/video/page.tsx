@@ -181,7 +181,8 @@ export default function CreateVideoPage() {
 
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
-    const cost = mode === 'enhance' ? 15 : mode === 'extend' ? 20 : 25;
+    // 3算力点/秒 × 时长
+    const cost = 3 * duration;
     if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
 
     setLoading(true);
@@ -377,7 +378,7 @@ export default function CreateVideoPage() {
 
                 <div className="flex items-center justify-end">
                   <div className="text-sm text-muted-foreground">
-                    消耗 <span className="text-cyan-400 font-bold">{mode === 'enhance' ? 15 : mode === 'extend' ? 20 : 25}</span> 算力
+                    消耗 <span className="text-cyan-400 font-bold">{3 * duration}</span> 算力点（3点/秒×{duration}秒）
                   </div>
                 </div>
                 <Button
@@ -521,7 +522,7 @@ export default function CreateVideoPage() {
                     </div>
                     {tpl.is_vip_only && <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs shrink-0 ml-2">VIP</Badge>}
                   </div>
-                  <div className="text-xs text-cyan-400 mt-2">{tpl.credits_cost} 算力</div>
+                  <div className="text-xs text-cyan-400 mt-2">{tpl.credits_cost} 算力点</div>
                 </CardContent>
               </Card>
             ))}
