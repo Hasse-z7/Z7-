@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  ImageIcon, Video, Music, Bot, Trash2, Download, Eye, FolderOpen
+  ImageIcon, Video, Music, Trash2, Download, Eye, FolderOpen
 } from 'lucide-react';
 
 interface Work {
@@ -60,7 +60,6 @@ export default function MyWorksPage() {
     image: ImageIcon,
     video: Video,
     audio: Music,
-    digital_human: Bot,
   };
 
   return (
@@ -79,7 +78,6 @@ export default function MyWorksPage() {
             <TabsTrigger value="image"><ImageIcon className="w-4 h-4 mr-1" />图片</TabsTrigger>
             <TabsTrigger value="video"><Video className="w-4 h-4 mr-1" />视频</TabsTrigger>
             <TabsTrigger value="audio"><Music className="w-4 h-4 mr-1" />音乐</TabsTrigger>
-            <TabsTrigger value="digital_human"><Bot className="w-4 h-4 mr-1" />数字人</TabsTrigger>
           </TabsList>
         </Tabs>
 

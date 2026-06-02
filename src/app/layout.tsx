@@ -10,8 +10,8 @@ export const metadata: Metadata = {
     default: 'AI创意工坊 - AI多媒体创作平台',
     template: '%s | AI创意工坊',
   },
-  description: 'AI生图、AI视频、AI音乐、AI数字人，一站式AI多媒体创作平台，让创意触手可及。',
-  keywords: ['AI创作', 'AI生图', 'AI视频', 'AI音乐', '数字人', 'AI创意工坊'],
+  description: 'AI生图、AI视频、AI音乐，一站式AI多媒体创作平台，让创意触手可及。',
+  keywords: ['AI创作', 'AI生图', 'AI视频', 'AI音乐', 'AI创意工坊'],
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

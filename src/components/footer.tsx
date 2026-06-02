@@ -11,7 +11,7 @@ export default function Footer() {
               <Link href="/create/image" className="block hover:text-foreground transition-colors">AI生图</Link>
               <Link href="/create/video" className="block hover:text-foreground transition-colors">AI视频生成</Link>
               <Link href="/create/music" className="block hover:text-foreground transition-colors">AI音乐创作</Link>
-              <Link href="/create/digital-human" className="block hover:text-foreground transition-colors">AI数字人</Link>
+
             </div>
           </div>
           <div>

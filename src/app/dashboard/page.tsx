@@ -5,8 +5,8 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  ImageIcon, Video, Music, UserRound, Sparkles, Zap, Crown,
-  ArrowRight, Wand2, Film, Mic, Bot
+  ImageIcon, Video, Music, Sparkles, Zap, Crown,
+  ArrowRight, Wand2, Film, Mic
 } from 'lucide-react';
 
 const features = [
@@ -34,14 +34,6 @@ const features = [
     gradient: 'from-rose-500 to-pink-600',
     bgGlow: 'bg-rose-500/20',
   },
-  {
-    title: 'AI数字人',
-    desc: '文字生成播报视频、多形象多音色',
-    icon: Bot,
-    href: '/create/digital-human',
-    gradient: 'from-amber-500 to-orange-600',
-    bgGlow: 'bg-amber-500/20',
-  },
 ];
 
 const hotTemplates = [
@@ -51,7 +43,6 @@ const hotTemplates = [
   { name: '赛博朋克', category: 'image', style: '科技', gradient: 'from-cyan-500/20 to-blue-500/20' },
   { name: '流行音乐', category: 'music', style: '流行', gradient: 'from-rose-500/20 to-pink-500/20' },
   { name: '古风音乐', category: 'music', style: '古风', gradient: 'from-amber-500/20 to-orange-500/20' },
-  { name: '新闻播报', category: 'digital-human', style: '数字人', gradient: 'from-blue-500/20 to-indigo-500/20' },
   { name: '风景大片', category: 'video', style: '视频', gradient: 'from-green-500/20 to-emerald-500/20' },
 ];
 
@@ -80,7 +71,7 @@ export default function DashboardPage() {
               </span>
             </h1>
             <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-              一站式AI生图、视频生成、音乐制作、数字人视频创作平台，让你的想象变为现实
+              一站式AI生图、视频生成、音乐制作创作平台，让你的想象变为现实
             </p>
 
             {/* Stats */}
@@ -142,14 +133,14 @@ export default function DashboardPage() {
           {hotTemplates.map((tpl, idx) => (
             <Link
               key={idx}
-              href={`/create/${tpl.category === 'digital-human' ? 'digital-human' : tpl.category}`}
+              href={`/create/${tpl.category}`}
             >
               <Card className="group overflow-hidden border-border/50 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer">
                 <div className={`h-28 bg-gradient-to-br ${tpl.gradient} flex items-center justify-center`}>
                   {tpl.category === 'image' && <ImageIcon className="w-10 h-10 text-foreground/30" />}
                   {tpl.category === 'video' && <Video className="w-10 h-10 text-foreground/30" />}
                   {tpl.category === 'music' && <Music className="w-10 h-10 text-foreground/30" />}
-                  {tpl.category === 'digital-human' && <UserRound className="w-10 h-10 text-foreground/30" />}
+
                 </div>
                 <CardContent className="p-3">
                   <p className="font-medium text-sm">{tpl.name}</p>

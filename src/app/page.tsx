@@ -6,15 +6,14 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
-  Sparkles, Wand2, Film, Mic, Bot, Zap, Crown, ArrowRight,
-  ImageIcon, Video, Music, UserRound
+  Sparkles, Wand2, Film, Mic, Zap, Crown, ArrowRight,
+  ImageIcon, Video, Music
 } from 'lucide-react';
 
 const features = [
   { title: 'AI生图', desc: '文字生成精美图片，多种风格随心选择', icon: Wand2, href: '/create/image', gradient: 'from-violet-500 to-purple-600', glow: 'bg-violet-500/20' },
   { title: 'AI视频', desc: '文字/图片生成视频，画质增强', icon: Film, href: '/create/video', gradient: 'from-cyan-500 to-blue-600', glow: 'bg-cyan-500/20' },
   { title: 'AI音乐', desc: '文字生成歌曲，多曲风切换', icon: Mic, href: '/create/music', gradient: 'from-rose-500 to-pink-600', glow: 'bg-rose-500/20' },
-  { title: 'AI数字人', desc: '文字生成数字人播报视频', icon: Bot, href: '/create/digital-human', gradient: 'from-amber-500 to-orange-600', glow: 'bg-amber-500/20' },
 ];
 
 const showcases = [
@@ -25,7 +24,6 @@ const showcases = [
   { name: '影视短片', cat: 'video', icon: Video, gradient: 'from-blue-500/20 to-indigo-500/20' },
   { name: '风景大片', cat: 'video', icon: Video, gradient: 'from-green-500/20 to-emerald-500/20' },
   { name: '流行音乐', cat: 'music', icon: Music, gradient: 'from-rose-500/20 to-pink-500/20' },
-  { name: '新闻播报', cat: 'digital-human', icon: UserRound, gradient: 'from-amber-500/20 to-orange-500/20' },
 ];
 
 export default function HomePage() {
@@ -54,7 +52,7 @@ export default function HomePage() {
               </span>
             </h1>
             <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
-              一站式AI生图、视频生成、音乐制作、数字人视频创作，让你的想象变为现实
+              一站式AI生图、视频生成、音乐制作，让你的想象变为现实
             </p>
 
             <div className="flex items-center justify-center gap-4 pt-4">
@@ -121,7 +119,7 @@ export default function HomePage() {
         <p className="text-muted-foreground mb-8">精选AI创作模板，一键生成</p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {showcases.map((s, i) => (
-            <Link key={i} href={user ? `/create/${s.cat === 'digital-human' ? 'digital-human' : s.cat}` : '/login'}>
+            <Link key={i} href={user ? `/create/${s.cat}` : '/login'}>
               <Card className="group overflow-hidden border-border/50 hover:border-primary/30 transition-all hover:-translate-y-1 cursor-pointer">
                 <div className={`h-28 bg-gradient-to-br ${s.gradient} flex items-center justify-center`}>
                   <s.icon className="w-10 h-10 text-foreground/20" />
@@ -147,7 +145,7 @@ export default function HomePage() {
               <h3 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
                 新人注册即送10算力
               </h3>
-              <p className="text-muted-foreground mt-2">立即注册，免费体验AI生图、视频、音乐、数字人创作</p>
+              <p className="text-muted-foreground mt-2">立即注册，免费体验AI生图、视频、音乐创作</p>
             </div>
             <Link href="/register">
               <Button size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium px-8">

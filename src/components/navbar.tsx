@@ -33,7 +33,7 @@ export default function Navbar() {
     { href: '/create/image', label: 'AI生图', icon: Sparkles },
     { href: '/create/video', label: 'AI视频', icon: Video },
     { href: '/create/music', label: 'AI音乐', icon: Music },
-    { href: '/create/digital-human', label: '数字人', icon: UserRound },
+
   ];
 
   const handleSearch = (e: React.FormEvent) => {
