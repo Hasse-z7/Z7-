@@ -59,7 +59,7 @@ const imageRatios = [
 ];
 
 export default function CreateImagePage() {
-  const { profile, user } = useAuth();
+  const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState<'text2img' | 'img2img' | 'hd_fix' | 'outpaint'>('text2img');
@@ -118,27 +118,15 @@ export default function CreateImagePage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, width: calculatedWidth, height: calculatedHeight }),
+        body: JSON.stringify({ prompt, size: `${calculatedWidth}*${calculatedHeight}` }),
       });
       const data = await res.json();
-      if (data.image_url) {
-        setResultUrl(data.image_url);
-        // Save to works
-        await fetch('/api/works', { credentials: 'include',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({
-            title: prompt.slice(0, 50),
-            work_type: 'image',
-            file_url: data.image_url,
-            thumbnail_url: data.image_url,
-            prompt,
-            metadata: { mode, style: selectedStyle, width, height },
-          }),
-        });
+      const imageUrl = data.image_urls?.[0] || data.image_url;
+      if (imageUrl) {
+        setResultUrl(imageUrl);
+        if (data.remaining_credits !== undefined) {
+          updateCredits(data.remaining_credits);
+        }
       } else {
         alert(data.error || '生成失败');
       }

@@ -36,7 +36,7 @@ const voices = [
 ];
 
 export default function CreateDigitalHumanPage() {
-  const { profile, user } = useAuth();
+  const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('news_anchor');
@@ -81,22 +81,12 @@ export default function CreateDigitalHumanPage() {
         }),
       });
       const data = await res.json();
-      if (data.video_url) {
-        setResultUrl(data.video_url);
-        await fetch('/api/works', { credentials: 'include',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({
-            title: prompt.slice(0, 50),
-            work_type: 'digital_human',
-            file_url: data.video_url,
-            prompt,
-            metadata: { avatar: selectedAvatar, voice: selectedVoice, orientation },
-          }),
-        });
+      const videoUrl = data.video_url || data.url;
+      if (videoUrl) {
+        setResultUrl(videoUrl);
+        if (data.remaining_credits !== undefined) {
+          updateCredits(data.remaining_credits);
+        }
       } else {
         alert(data.error || '生成失败');
       }

@@ -28,6 +28,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, nickname: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateCredits: (credits: number) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -39,6 +40,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => {},
   register: async () => {},
   logout: async () => {},
+  updateCredits: () => {},
 });
 
 const TOKEN_KEY = 'sb-access-token';
@@ -144,9 +146,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
   }, []);
 
+  const updateCredits = useCallback((credits: number) => {
+    setProfile(prev => prev ? { ...prev, credits } : prev);
+  }, []);
+
   const value = useMemo(() => ({
-    user, profile, loading, token, refreshProfile, login, register, logout,
-  }), [user, profile, loading, token, refreshProfile, login, register, logout]);
+    user, profile, loading, token, refreshProfile, login, register, logout, updateCredits,
+  }), [user, profile, loading, token, refreshProfile, login, register, logout, updateCredits]);
 
   return (
     <AuthContext.Provider value={value}>

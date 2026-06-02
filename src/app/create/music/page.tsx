@@ -32,7 +32,7 @@ const musicStyles = [
 ];
 
 export default function CreateMusicPage() {
-  const { profile, user } = useAuth();
+  const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
   const [lyrics, setLyrics] = useState('');
@@ -72,23 +72,13 @@ export default function CreateMusicPage() {
         body: JSON.stringify({ prompt: prompt || lyrics, style: selectedStyle, lyrics }),
       });
       const data = await res.json();
-      if (data.audio_url) {
-        setResultUrl(data.audio_url);
+      const audioUrl = data.audio_url || data.url;
+      if (audioUrl) {
+        setResultUrl(audioUrl);
         setResultLyrics(data.lyrics || '');
-        await fetch('/api/works', { credentials: 'include',
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...getAuthHeaders(),
-          },
-          body: JSON.stringify({
-            title: (prompt || lyrics).slice(0, 50),
-            work_type: 'audio',
-            file_url: data.audio_url,
-            prompt: prompt || lyrics,
-            metadata: { style: selectedStyle, lyrics: data.lyrics },
-          }),
-        });
+        if (data.remaining_credits !== undefined) {
+          updateCredits(data.remaining_credits);
+        }
       } else {
         alert(data.error || '生成失败');
       }
