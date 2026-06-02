@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Users, CreditCard, Zap, Download, Shield, Server
+  Users, CreditCard, Zap, Download, Shield
 } from 'lucide-react';
 
 interface Profile {
@@ -85,15 +85,7 @@ export default function AdminPage() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold">管理后台</h1>
-          <p className="text-muted-foreground mt-2">用户管理、订单管理、算力统计、模型管理</p>
-        </div>
-
-        {/* Quick Links */}
-        <div className="mb-6">
-          <a href="/admin/models" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-500/10 text-cyan-400 text-sm font-medium hover:bg-cyan-500/20 transition-colors">
-            <Server className="w-4 h-4" />
-            模型管理
-          </a>
+          <p className="text-muted-foreground mt-2">用户管理、订单管理、算力统计</p>
         </div>
 
         {/* Stats */}

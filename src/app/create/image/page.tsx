@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Wand2, ImageIcon, Upload, Download, Sparkles, Loader2,
-  Palette, Maximize2, Filter, X, Plus, ChevronDown
+  Palette, Maximize2, Filter, X, Plus
 } from 'lucide-react';
 
 interface Template {
@@ -76,11 +76,6 @@ export default function CreateImagePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const MAX_REF_IMAGES = 12;
 
-  // 模型选择
-  const [models, setModels] = useState<{ id: string; name: string; endpoint_id: string }[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string>('');
-  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
-
   const fetchTemplates = useCallback(async () => {
     try {
       const res = await fetch('/api/templates?category=image');
@@ -93,37 +88,9 @@ export default function CreateImagePage() {
 
   useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
 
-  // 获取模型列表
-  useEffect(() => {
-    const fetchModels = async () => {
-      try {
-        const res = await fetch('/api/models?category=image');
-        const data = await res.json();
-        if (data.models && data.models.length > 0) {
-          setModels(data.models);
-          // 恢复上次选择
-          const saved = localStorage.getItem('image_selected_model');
-          const found = saved && data.models.some((m: { endpoint_id: string }) => m.endpoint_id === saved);
-          setSelectedModelId(found ? saved : data.models[0].endpoint_id);
-        }
-      } catch (err) {
-        console.error('Fetch models error:', err);
-      }
-    };
-    fetchModels();
-  }, []);
-
-  // 保存模型选择
-  const handleModelChange = (endpointId: string) => {
-    setSelectedModelId(endpointId);
-    localStorage.setItem('image_selected_model', endpointId);
-    setModelDropdownOpen(false);
-  };
-
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
     if (!prompt.trim()) return;
-    if (!selectedModelId) { alert('请选择生成模型'); return; }
 
     // Calculate dimensions from resolution + aspect ratio
     const { base } = resolutionMap[resolution];
@@ -151,7 +118,7 @@ export default function CreateImagePage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, size: `${calculatedWidth}*${calculatedHeight}`, model_id: selectedModelId }),
+        body: JSON.stringify({ prompt, size: `${calculatedWidth}*${calculatedHeight}` }),
       });
       const data = await res.json();
       const imageUrl = data.image_urls?.[0] || data.image_url;
@@ -244,46 +211,6 @@ export default function CreateImagePage() {
                 <TabsTrigger value="outpaint"><Palette className="w-4 h-4 mr-1" />扩图</TabsTrigger>
               </TabsList>
             </Tabs>
-
-            {/* Model Selection */}
-            {models.length > 0 && (
-              <Card className="border-border/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">模型选择</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="relative">
-                    <button
-                      className="w-full flex items-center justify-between px-4 py-2.5 rounded-lg border border-border/50 bg-muted/30 text-sm hover:bg-muted/50 transition-colors"
-                      onClick={() => setModelDropdownOpen(!modelDropdownOpen)}
-                    >
-                      <span className="truncate">
-                        {models.find(m => m.endpoint_id === selectedModelId)?.name || '选择模型'}
-                      </span>
-                      <ChevronDown className={`w-4 h-4 ml-2 shrink-0 transition-transform ${modelDropdownOpen ? 'rotate-180' : ''}`} />
-                    </button>
-                    {modelDropdownOpen && (
-                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border/50 rounded-lg shadow-lg overflow-hidden">
-                        {models.map((model) => (
-                          <button
-                            key={model.id}
-                            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-muted/50 transition-colors ${
-                              selectedModelId === model.endpoint_id
-                                ? 'bg-violet-500/10 text-violet-400'
-                                : ''
-                            }`}
-                            onClick={() => handleModelChange(model.endpoint_id)}
-                          >
-                            <div className="font-medium">{model.name}</div>
-                            <div className="text-xs text-muted-foreground mt-0.5 font-mono">{model.endpoint_id.slice(0, 24)}...</div>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
 
             {/* Style Selection */}
             <Card className="border-border/50">

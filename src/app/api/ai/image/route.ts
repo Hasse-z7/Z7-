@@ -11,15 +11,10 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { prompt, size, image_urls, mode, imageCount, model_id } = body;
+    const { prompt, size, image_urls, mode, imageCount } = body;
 
     if (!prompt && !image_urls?.length) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
-    }
-
-    // 校验模型ID
-    if (!model_id || typeof model_id !== 'string' || !model_id.startsWith('ark-')) {
-      return NextResponse.json({ error: '请选择有效的生成模型' }, { status: 400 });
     }
 
     const { supabase } = authResult;
@@ -41,7 +36,7 @@ export async function POST(request: NextRequest) {
     // ========== 2. 调用AI模型生成图片 ==========
     let generatedUrls: string[];
     try {
-      generatedUrls = await generateImage(prompt || '', size || '2K', image_urls, model_id);
+      generatedUrls = await generateImage(prompt || '', size || '2K', image_urls);
     } catch (aiError: unknown) {
       // AI调用失败，退还已扣除的算力
       await refundCredits(supabase, authResult.user.id, deduction);
@@ -71,7 +66,7 @@ export async function POST(request: NextRequest) {
       amount: -creditsCost,
       balanceAfter: deduction.newTotalCredits,
       type: 'consumption',
-      description: `AI生图(${count}张) - ${mode || 'text2img'} - ${model_id.slice(0, 16)}`,
+      description: `AI生图(${count}张) - ${mode || 'text2img'}`,
       creditsType,
     });
 
