@@ -7,7 +7,7 @@ import { useTheme } from 'next-themes';
 import { useState, useEffect } from 'react';
 import {
   Sparkles, Video, Music, UserRound, CreditCard, LogOut,
-  Sun, Moon, Search, Menu, X, FolderOpen, Crown
+  Sun, Moon, Search, Menu, X, FolderOpen, Crown, History, Trash2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,7 +33,12 @@ export default function Navbar() {
     { href: '/create/image', label: 'AI生图', icon: Sparkles },
     { href: '/create/video', label: 'AI视频', icon: Video },
     { href: '/create/music', label: 'AI音乐', icon: Music },
+  ];
 
+  const projectLinks = [
+    { href: '/projects', label: '项目管理', icon: FolderOpen },
+    { href: '/history', label: '历史记录', icon: History },
+    { href: '/trash', label: '回收站', icon: Trash2 },
   ];
 
   const handleSearch = (e: React.FormEvent) => {
@@ -74,6 +79,25 @@ export default function Navbar() {
           {navLinks.map((link) => {
             const Icon = link.icon;
             const isActive = pathname.startsWith(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-cyan-500/10 text-cyan-400'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent'
+                }`}
+              >
+                <Icon className="h-4 w-4" />
+                {link.label}
+              </Link>
+            );
+          })}
+          <span className="w-px h-5 bg-border/50 mx-1" />
+          {projectLinks.map((link) => {
+            const Icon = link.icon;
+            const isActive = pathname === link.href;
             return (
               <Link
                 key={link.href}
@@ -182,7 +206,7 @@ export default function Navbar() {
       {mobileOpen && (
         <div className="md:hidden border-t border-border/40 bg-background/95 backdrop-blur-xl">
           <div className="container px-4 py-3 space-y-1">
-            {navLinks.map((link) => {
+            {navLinks.concat(projectLinks).map((link) => {
               const Icon = link.icon;
               return (
                 <Link

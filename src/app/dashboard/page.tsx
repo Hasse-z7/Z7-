@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   ImageIcon, Video, Music, Sparkles, Zap, Crown,
-  ArrowRight, Wand2, Film, Mic
+  ArrowRight, Wand2, Film, Mic, FolderOpen, History, Trash2
 } from 'lucide-react';
 
 const features = [
@@ -149,6 +149,51 @@ export default function DashboardPage() {
               </Card>
             </Link>
           ))}
+        </div>
+      </section>
+
+      {/* Quick Links */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <Link href="/projects">
+            <Card className="group hover:border-cyan-500/30 transition-all duration-300 hover:-translate-y-1 cursor-pointer">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="p-2.5 rounded-lg bg-cyan-500/10 group-hover:bg-cyan-500/20 transition-colors">
+                  <FolderOpen className="w-5 h-5 text-cyan-500" />
+                </div>
+                <div>
+                  <p className="font-medium">我的项目</p>
+                  <p className="text-sm text-muted-foreground">管理创作项目</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/history">
+            <Card className="group hover:border-cyan-500/30 transition-all duration-300 hover:-translate-y-1 cursor-pointer">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="p-2.5 rounded-lg bg-violet-500/10 group-hover:bg-violet-500/20 transition-colors">
+                  <History className="w-5 h-5 text-violet-500" />
+                </div>
+                <div>
+                  <p className="font-medium">历史记录</p>
+                  <p className="text-sm text-muted-foreground">查看所有创作</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+          <Link href="/trash">
+            <Card className="group hover:border-cyan-500/30 transition-all duration-300 hover:-translate-y-1 cursor-pointer">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="p-2.5 rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
+                  <Trash2 className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <p className="font-medium">回收站</p>
+                  <p className="text-sm text-muted-foreground">恢复已删除作品</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
         </div>
       </section>
 

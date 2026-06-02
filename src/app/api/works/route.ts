@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 
+// GET /api/works — 获取作品列表（支持 type, project_id, trash 参数）
 export async function GET(request: NextRequest) {
   try {
     const { user, supabase } = await getAuthUser(request);
@@ -10,6 +11,8 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const workType = searchParams.get('type');
+    const projectId = searchParams.get('project_id');
+    const trash = searchParams.get('trash') === 'true';
 
     let query = supabase
       .from('user_works')
@@ -19,6 +22,18 @@ export async function GET(request: NextRequest) {
 
     if (workType) {
       query = query.eq('work_type', workType);
+    }
+
+    if (projectId) {
+      query = query.eq('project_id', projectId);
+    }
+
+    if (trash) {
+      // 回收站：已软删除的
+      query = query.not('deleted_at', 'is', null);
+    } else {
+      // 正常列表：未删除的
+      query = query.is('deleted_at', null);
     }
 
     const { data, error } = await query;
@@ -34,6 +49,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// POST /api/works — 创建作品
 export async function POST(request: NextRequest) {
   try {
     const { user, supabase } = await getAuthUser(request);
@@ -41,7 +57,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
     }
 
-    const { title, work_type, file_url, thumbnail_url, prompt, metadata } = await request.json();
+    const { title, work_type, file_url, thumbnail_url, prompt, metadata, project_id } = await request.json();
 
     const { data, error } = await supabase.from('user_works').insert({
       user_id: user.id,
@@ -51,6 +67,7 @@ export async function POST(request: NextRequest) {
       thumbnail_url,
       prompt,
       metadata,
+      project_id: project_id || null,
     }).select().maybeSingle();
 
     if (error) {
@@ -64,6 +81,74 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// PUT /api/works — 软删除/恢复/永久删除作品
+export async function PUT(request: NextRequest) {
+  try {
+    const { user, supabase } = await getAuthUser(request);
+    if (!user) {
+      return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
+    const body = await request.json();
+    const { action, ids } = body;
+
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return NextResponse.json({ error: '缺少作品ID' }, { status: 400 });
+    }
+
+    if (action === 'soft_delete') {
+      // 软删除：移入回收站
+      const { error } = await supabase
+        .from('user_works')
+        .update({ deleted_at: new Date().toISOString() })
+        .in('id', ids)
+        .eq('user_id', user.id)
+        .is('deleted_at', null);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, action: 'soft_delete' });
+    }
+
+    if (action === 'restore') {
+      // 恢复：从回收站还原
+      const { error } = await supabase
+        .from('user_works')
+        .update({ deleted_at: null })
+        .in('id', ids)
+        .eq('user_id', user.id)
+        .not('deleted_at', 'is', null);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, action: 'restore' });
+    }
+
+    if (action === 'permanent_delete') {
+      // 永久删除
+      const { error } = await supabase
+        .from('user_works')
+        .delete()
+        .in('id', ids)
+        .eq('user_id', user.id)
+        .not('deleted_at', 'is', null);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, action: 'permanent_delete' });
+    }
+
+    return NextResponse.json({ error: '未知操作' }, { status: 400 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '操作失败';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+// DELETE /api/works?id=xxx — 软删除单个作品（兼容旧调用）
 export async function DELETE(request: NextRequest) {
   try {
     const { user, supabase } = await getAuthUser(request);
@@ -78,11 +163,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: '缺少作品ID' }, { status: 400 });
     }
 
+    // 软删除：移入回收站
     const { error } = await supabase
       .from('user_works')
-      .delete()
+      .update({ deleted_at: new Date().toISOString() })
       .eq('id', workId)
-      .eq('user_id', user.id);
+      .eq('user_id', user.id)
+      .is('deleted_at', null);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

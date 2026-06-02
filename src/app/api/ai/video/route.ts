@@ -16,6 +16,24 @@ import { deductCredits, recordTransaction, CREDITS_PER_SECOND } from '@/lib/cred
 import { isCircuitBreakerOpen } from '@/lib/ark-config';
 import { createClient } from '@supabase/supabase-js';
 
+/** 自动创建项目：如果未传project_id，按日期命名创建默认项目 */
+async function ensureProject(supabase: import('@supabase/supabase-js').SupabaseClient, userId: string, projectId?: string): Promise<string | null> {
+  if (projectId) {
+    // 验证项目属于当前用户
+    const { data } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle() as { data: { id: string } | null };
+    if (data) return data.id;
+  }
+  // 按日期命名创建默认项目
+  const now = new Date();
+  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}项目`;
+  const { data: newProject } = await supabase
+    .from('projects')
+    .insert({ user_id: userId, name: dateName, is_default: true })
+    .select('id')
+    .maybeSingle() as { data: { id: string } | null };
+  return newProject?.id || null;
+}
+
 /** 获取模型接入点ID：从前端传来的model_id查询数据库，无效则报错 */
 async function resolveModelEndpoint(modelId: string | undefined, category: string): Promise<{ endpointId: string; modelName: string }> {
   // 未传model_id，返回错误
@@ -87,6 +105,7 @@ export async function POST(request: NextRequest) {
       audio,
       audio_url,
       model_id,
+      project_id,
     } = body;
 
     if (!prompt && !image_url && (!images || images.length === 0)) {
@@ -106,6 +125,9 @@ export async function POST(request: NextRequest) {
     }
 
     const { supabase } = authResult;
+
+    // ========== 2.8 自动创建项目 ==========
+    const resolvedProjectId = await ensureProject(supabase, authResult.user.id, project_id);
 
     // ========== 3. 计算算力消耗 ==========
     const videoDuration = duration || 5;
@@ -148,6 +170,7 @@ export async function POST(request: NextRequest) {
         free_deducted: deduction.freeDeducted,
         paid_deducted: deduction.paidDeducted,
         model_endpoint: modelEndpoint,
+        project_id: resolvedProjectId,
       })
       .select('id')
       .maybeSingle();

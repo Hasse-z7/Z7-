@@ -73,6 +73,10 @@ export default function CreateVideoPage() {
   const [models, setModels] = useState<AIModel[]>([]);
   const [selectedModelEndpoint, setSelectedModelEndpoint] = useState<string>('');
 
+  // Project selection
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+
   const fetchTemplates = useCallback(async () => {
     try {
       const res = await fetch('/api/templates?category=video');
@@ -102,7 +106,23 @@ export default function CreateVideoPage() {
     }
   }, []);
 
-  useEffect(() => { fetchTemplates(); fetchModels(); }, [fetchTemplates, fetchModels]);
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await fetch('/api/projects');
+      const data = await res.json();
+      if (data.projects) {
+        setProjects(data.projects);
+        const saved = localStorage.getItem('selected_project_id');
+        if (saved && data.projects.some((p: { id: string }) => p.id === saved)) {
+          setSelectedProjectId(saved);
+        }
+      }
+    } catch (err) {
+      console.error('Fetch projects error:', err);
+    }
+  }, []);
+
+  useEffect(() => { fetchTemplates(); fetchModels(); fetchProjects(); }, [fetchTemplates, fetchModels, fetchProjects]);
 
   // Multi-image upload handlers
   const addRefImages = (files: FileList | File[]) => {
@@ -228,7 +248,7 @@ export default function CreateVideoPage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint }),
+        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
       });
       const data = await res.json();
 
@@ -500,6 +520,25 @@ export default function CreateVideoPage() {
           </div>
 
           <div className="space-y-4">
+            {/* Project Selection */}
+            <Card className="border-border/50">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold">项目选择</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <select
+                  value={selectedProjectId || ''}
+                  onChange={(e) => setSelectedProjectId(e.target.value)}
+                  className="w-full appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                >
+                  <option value="">自动创建新项目</option>
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}</option>
+                  ))}
+                </select>
+              </CardContent>
+            </Card>
+
             {/* Model Selection */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">

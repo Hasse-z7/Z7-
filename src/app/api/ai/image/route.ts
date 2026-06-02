@@ -4,6 +4,25 @@ import { generateImage } from '@/lib/coze-api';
 import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
+/** 自动创建或获取项目：无project_id时按日期命名自动创建 */
+async function ensureProject(supabase: ReturnType<typeof getSupabaseClient> extends Promise<infer T> ? T : ReturnType<typeof getSupabaseClient>, userId: string, projectId?: string) {
+  if (projectId) {
+    // 验证项目存在且属于该用户
+    const { data } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', userId).maybeSingle();
+    if (data) return projectId;
+  }
+  // 自动创建：按日期命名
+  const now = new Date();
+  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}项目`;
+  // 检查同名项目是否已存在
+  const { data: existing } = await supabase.from('projects').select('id').eq('user_id', userId).eq('name', dateName).maybeSingle();
+  if (existing) return existing.id;
+  // 创建新项目
+  const { data: created, error } = await supabase.from('projects').insert({ user_id: userId, name: dateName }).select('id').maybeSingle();
+  if (error || !created) return null;
+  return created.id;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const authResult = await getAuthUser(request);
@@ -12,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { prompt, size, image_urls, mode, imageCount, model_endpoint } = body;
+    const { prompt, size, image_urls, mode, imageCount, model_endpoint, project_id } = body;
 
     if (!prompt && !image_urls?.length) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
@@ -90,7 +109,10 @@ export async function POST(request: NextRequest) {
       creditsType,
     });
 
-    // ========== 4. 保存作品 ==========
+    // ========== 4. 确定项目 ==========
+    const resolvedProjectId = await ensureProject(supabase, authResult.user.id, project_id);
+
+    // ========== 5. 保存作品 ==========
     if (generatedUrls[0]) {
       await supabase.from('user_works').insert({
         user_id: authResult.user.id,
@@ -98,6 +120,7 @@ export async function POST(request: NextRequest) {
         file_url: generatedUrls[0],
         prompt: prompt || '',
         credits_cost: creditsCost,
+        project_id: resolvedProjectId,
       });
     }
 
