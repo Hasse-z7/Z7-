@@ -10,7 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import {
   Download, Sparkles, Loader2,
   ChevronDown, FolderPlus,
-  RefreshCw, Pencil, Check, Trash2, Clock, CheckCircle2, XCircle, X
+  RefreshCw, Pencil, Check, Trash2, Clock, CheckCircle2, XCircle, X,
+  Upload, ImagePlus, Plus
 } from 'lucide-react';
 
 interface Template {
@@ -88,6 +89,9 @@ export default function CreateImagePage() {
   // 未保存到项目的作品追踪
   const [unsavedWorkIds, setUnsavedWorkIds] = useState<string[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [refImageUrls, setRefImageUrls] = useState<string[]>([]);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const imgFileInputRef = useRef<HTMLInputElement>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -104,6 +108,40 @@ export default function CreateImagePage() {
 
   const handleSelectTemplate = (tpl: Template) => {
     setPrompt(tpl.prompt_template);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    setUploadingImage(true);
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) continue;
+        if (file.size > 20 * 1024 * 1024) continue;
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('type', 'image');
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: formData,
+        });
+        const data = await res.json();
+        if (data.url) {
+          setRefImageUrls(prev => [...prev, data.url]);
+        }
+      }
+    } catch (err) {
+      console.error('Upload failed:', err);
+    } finally {
+      setUploadingImage(false);
+      if (imgFileInputRef.current) imgFileInputRef.current.value = '';
+    }
+  };
+
+  const removeRefImage = (index: number) => {
+    setRefImageUrls(prev => prev.filter((_, i) => i !== index));
   };
 
   const fetchModels = useCallback(async () => {
@@ -256,7 +294,7 @@ export default function CreateImagePage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt: activePrompt, size: `${calculatedWidth}*${calculatedHeight}`, model_endpoint: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
+        body: JSON.stringify({ prompt: activePrompt, size: `${calculatedWidth}*${calculatedHeight}`, model_endpoint: selectedModelEndpoint, project_id: selectedProjectId || undefined, image_urls: refImageUrls.length > 0 ? refImageUrls : undefined }),
       });
       const data = await res.json();
       const imageUrl = data.image_urls?.[0] || data.image_url;
@@ -349,6 +387,54 @@ export default function CreateImagePage() {
                   rows={4}
                   className="resize-none"
                 />
+                {/* Reference Images */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-muted-foreground">参考图片（图生图）</label>
+                    {refImageUrls.length > 0 && (
+                      <Button variant="ghost" size="sm" className="h-6 text-xs text-destructive" onClick={() => setRefImageUrls([])}>
+                        清空全部
+                      </Button>
+                    )}
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {refImageUrls.map((url, idx) => (
+                      <div key={idx} className="relative w-16 h-16 rounded-lg overflow-hidden border border-border group">
+                        <img src={url} alt={`参考图${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          className="absolute top-0.5 right-0.5 w-4 h-4 rounded-full bg-destructive/80 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setRefImageUrls(prev => prev.filter((_, i) => i !== idx))}
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                    {refImageUrls.length < 4 && (
+                      <label className="w-16 h-16 rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center cursor-pointer hover:border-cyan-400/50 hover:bg-cyan-400/5 transition-colors">
+                        <Plus className="w-5 h-5 text-muted-foreground/50" />
+                        <span className="text-[10px] text-muted-foreground/50 mt-0.5">上传</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            try {
+                              const res = await fetch('/api/upload', { method: 'POST', body: formData, headers: getAuthHeaders() });
+                              const data = await res.json();
+                              if (data.url) setRefImageUrls(prev => [...prev, data.url]);
+                            } catch { /* ignore */ }
+                            e.target.value = '';
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
                     消耗 <span className="text-cyan-400 font-bold">2</span> 算力点/张

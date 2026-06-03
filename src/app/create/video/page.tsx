@@ -9,7 +9,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
   Sparkles, Loader2, Music, PlayCircle, PauseCircle, Trash2, ChevronDown, FolderPlus,
-  RefreshCw, Pencil, Check, Clock, CheckCircle2, XCircle, Download, X
+  RefreshCw, Pencil, Check, Clock, CheckCircle2, XCircle, Download, X, Plus, Upload,
+  ImageIcon
 } from 'lucide-react';
 
 interface Template {
@@ -81,6 +82,9 @@ export default function CreateVideoPage() {
   // 未保存到项目的视频任务追踪
   const [unsavedTaskIds, setUnsavedTaskIds] = useState<string[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [refImageUrls, setRefImageUrls] = useState<string[]>([]);
+  const [audioUrl, setAudioUrl] = useState<string>('');
+  const [uploadingFile, setUploadingFile] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -210,7 +214,7 @@ export default function CreateVideoPage() {
   };
 
   // Audio upload handlers
-  const handleAudioFile = (files: FileList | File[]) => {
+  const handleAudioFile = async (files: FileList | File[]) => {
     const file = Array.from(files).find(f => f.type === 'audio/mpeg' || f.name.toLowerCase().endsWith('.mp3'));
     if (!file) {
       alert('仅支持 MP3 格式音频文件');
@@ -221,6 +225,23 @@ export default function CreateVideoPage() {
       setAudioPlaying(false);
     }
     setAudioFile({ file, preview: URL.createObjectURL(file) });
+    // 上传到S3获取URL
+    setAudioUrl('');
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        body: formData,
+      });
+      const data = await res.json();
+      if (data.url) {
+        setAudioUrl(data.url);
+      }
+    } catch {
+      // 上传失败时使用本地预览
+    }
   };
 
   const removeAudio = () => {
@@ -232,6 +253,7 @@ export default function CreateVideoPage() {
       }
       setAudioPlaying(false);
       setAudioFile(null);
+      setAudioUrl('');
     }
   };
 
@@ -332,6 +354,34 @@ export default function CreateVideoPage() {
     }, 16 * 60 * 1000);
   };
 
+  const handleUploadImage = async (file: File) => {
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'image');
+      const res = await fetch('/api/upload', { method: 'POST', headers: getAuthHeaders(), body: formData });
+      const data = await res.json();
+      if (data.url) { setRefImageUrls(prev => [...prev, data.url]); }
+      else { alert(data.error || '上传失败'); }
+    } catch { alert('上传失败'); }
+    finally { setUploadingFile(false); }
+  };
+
+  const handleUploadAudio = async (file: File) => {
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'audio');
+      const res = await fetch('/api/upload', { method: 'POST', headers: getAuthHeaders(), body: formData });
+      const data = await res.json();
+      if (data.url) { setAudioUrl(data.url); }
+      else { alert(data.error || '上传失败'); }
+    } catch { alert('上传失败'); }
+    finally { setUploadingFile(false); }
+  };
+
   const handleGenerate = async (overridePrompt?: string) => {
     if (!user) { router.push('/login'); return; }
     const activePrompt = overridePrompt || prompt;
@@ -368,7 +418,7 @@ export default function CreateVideoPage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt: activePrompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
+        body: JSON.stringify({ prompt: activePrompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined, images: refImageUrls.length > 0 ? refImageUrls : undefined, audio_url: audioUrl || undefined }),
       });
       const data = await res.json();
 
@@ -479,6 +529,61 @@ export default function CreateVideoPage() {
                   onChange={(e) => setPrompt(e.target.value)}
                   rows={4}
                 />
+
+                {/* Reference Image Upload */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-cyan-400" />
+                    <span className="text-sm font-medium">参考图片</span>
+                    <span className="text-xs text-muted-foreground">（图生视频）</span>
+                  </div>
+                  {refImageUrls.length > 0 ? (
+                    <div className="flex gap-2 flex-wrap">
+                      {refImageUrls.map((url, idx) => (
+                        <div key={idx} className="relative group w-20 h-20 rounded-lg overflow-hidden border border-border/50">
+                          <img src={url} alt={`参考图${idx + 1}`} className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => setRefImageUrls(prev => prev.filter((_, i) => i !== idx))}
+                            className="absolute top-0.5 right-0.5 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {refImageUrls.length < 4 && (
+                        <label className="w-20 h-20 rounded-lg border-2 border-dashed border-border/50 flex items-center justify-center cursor-pointer hover:border-cyan-500/40 transition-colors">
+                          <Plus className="w-5 h-5 text-muted-foreground" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUploadImage(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  ) : (
+                    <label className="block border-2 border-dashed rounded-xl p-4 text-center transition-all cursor-pointer border-border/50 hover:border-cyan-500/40 hover:bg-muted/30">
+                      <ImageIcon className="w-5 h-5 mx-auto text-muted-foreground mb-1" />
+                      <p className="text-sm text-muted-foreground">点击上传参考图片</p>
+                      <p className="text-xs text-muted-foreground/60 mt-1">上传图片后将以图片为基础生成视频</p>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleUploadImage(file);
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
 
                 {/* Audio Upload Module */}
                 <div className="space-y-3">
