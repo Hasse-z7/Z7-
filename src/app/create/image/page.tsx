@@ -187,7 +187,7 @@ export default function CreateImagePage() {
       const res = await fetch('/api/works', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ action: 'save_to_project', ids: unsavedWorkIds, project_name: dateName }),
+        body: JSON.stringify({ action: 'save_to_project', work_ids: unsavedWorkIds, project_name: dateName }),
       });
       const data = await res.json();
       if (data.success) {

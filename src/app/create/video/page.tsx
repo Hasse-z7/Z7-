@@ -188,7 +188,7 @@ export default function CreateVideoPage() {
       const res = await fetch('/api/works', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ action: 'save_to_project', ids: unsavedTaskIds, project_name: dateName }),
+        body: JSON.stringify({ action: 'save_to_project', task_ids: unsavedTaskIds, project_name: dateName }),
       });
       const data = await res.json();
       if (data.success) {

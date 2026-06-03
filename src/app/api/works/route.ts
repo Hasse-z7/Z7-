@@ -143,43 +143,70 @@ export async function PUT(request: NextRequest) {
 
     if (action === 'save_to_project') {
       // 将作品保存到项目（创建项目+关联作品）
-      const { project_name } = body;
+      const { project_name, work_ids, task_ids } = body;
       if (!project_name) {
         return NextResponse.json({ error: '缺少项目名称' }, { status: 400 });
       }
 
-      // 创建项目
-      const { data: project, error: projectError } = await supabase
+      const wIds: string[] = work_ids || ids || [];
+      const tIds: string[] = task_ids || [];
+
+      // 创建项目（若同名已存在则复用）
+      const { data: existingProject } = await supabase
         .from('projects')
-        .insert({ user_id: user.id, name: project_name })
         .select('id')
+        .eq('user_id', user.id)
+        .eq('name', project_name)
         .maybeSingle();
 
-      if (projectError || !project) {
-        return NextResponse.json({ error: '创建项目失败' }, { status: 500 });
+      let projectId: string;
+
+      if (existingProject) {
+        // 同名项目已存在，复用
+        projectId = existingProject.id;
+      } else {
+        // 创建新项目
+        const { data: project, error: projectError } = await supabase
+          .from('projects')
+          .insert({ user_id: user.id, name: project_name, is_default: false })
+          .select('id')
+          .maybeSingle();
+
+        if (projectError || !project) {
+          console.error('Create project error:', projectError);
+          return NextResponse.json({ error: projectError?.message || '创建项目失败' }, { status: 500 });
+        }
+        projectId = project.id;
       }
 
       // 更新作品的 project_id
-      const { error: updateError } = await supabase
-        .from('user_works')
-        .update({ project_id: project.id })
-        .in('id', ids)
-        .eq('user_id', user.id)
-        .is('project_id', null);
+      if (wIds.length > 0) {
+        const { error: updateError } = await supabase
+          .from('user_works')
+          .update({ project_id: projectId })
+          .in('id', wIds)
+          .eq('user_id', user.id);
 
-      if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 500 });
+        if (updateError) {
+          console.error('Update works project_id error:', updateError);
+          return NextResponse.json({ error: updateError.message }, { status: 500 });
+        }
       }
 
-      // 同时更新关联的视频任务
-      await supabase
-        .from('video_tasks')
-        .update({ project_id: project.id })
-        .in('id', ids)
-        .eq('user_id', user.id)
-        .is('project_id', null);
+      // 更新关联的视频任务
+      if (tIds.length > 0) {
+        const { error: taskUpdateError } = await supabase
+          .from('video_tasks')
+          .update({ project_id: projectId })
+          .in('id', tIds)
+          .eq('user_id', user.id);
 
-      return NextResponse.json({ success: true, action: 'save_to_project', project_id: project.id });
+        if (taskUpdateError) {
+          console.error('Update video_tasks project_id error:', taskUpdateError);
+        }
+      }
+
+      return NextResponse.json({ success: true, action: 'save_to_project', project_id: projectId });
     }
 
     return NextResponse.json({ error: '未知操作' }, { status: 400 });
