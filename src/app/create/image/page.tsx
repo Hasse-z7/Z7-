@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Wand2, ImageIcon, Upload, Download, Sparkles, Loader2,
-  Palette, Maximize2, Filter, X, Plus, ChevronDown, FolderPlus
+  Palette, Maximize2, Filter, X, Plus, ChevronDown, FolderPlus,
+  RefreshCw, Pencil, Check, Trash2, Clock, CheckCircle2, XCircle
 } from 'lucide-react';
 
 interface Template {
@@ -29,6 +30,18 @@ interface AIModel {
   endpoint_id: string;
   category: string;
   description: string;
+}
+
+interface ImageTask {
+  id: string;
+  prompt: string;
+  status: 'generating' | 'succeeded' | 'failed';
+  resultUrl: string;
+  error: string;
+  workId: string;
+  editingPrompt: string;
+  isEditing: boolean;
+  createdAt: number;
 }
 
 const styleCards = [
@@ -72,11 +85,7 @@ export default function CreateImagePage() {
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState<'text2img' | 'img2img' | 'hd_fix' | 'outpaint'>('text2img');
   const [selectedStyle, setSelectedStyle] = useState('realistic');
-  const [loading, setLoading] = useState(false);
-  const [resultUrl, setResultUrl] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [width, setWidth] = useState(1024);
-  const [height, setHeight] = useState(1024);
   const [resolution, setResolution] = useState<'1K' | '2K' | '4K'>('2K');
   const [aspectRatio, setAspectRatio] = useState<string>('自适应');
   const [refImages, setRefImages] = useState<{ file: File; preview: string }[]>([]);
@@ -87,6 +96,10 @@ export default function CreateImagePage() {
   const [selectedModelEndpoint, setSelectedModelEndpoint] = useState<string>('');
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+
+  // Multi-task queue
+  const [tasks, setTasks] = useState<ImageTask[]>([]);
+  const taskIdCounter = useRef(0);
 
   // 未保存到项目的作品追踪
   const [unsavedWorkIds, setUnsavedWorkIds] = useState<string[]>([]);
@@ -110,7 +123,6 @@ export default function CreateImagePage() {
       const data = await res.json();
       if (data.models) {
         setModels(data.models);
-        // 恢复上次选择的模型
         const saved = localStorage.getItem('selected_image_model');
         if (saved && data.models.some((m: AIModel) => m.endpoint_id === saved)) {
           setSelectedModelEndpoint(saved);
@@ -210,9 +222,10 @@ export default function CreateImagePage() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (overridePrompt?: string) => {
     if (!user) { router.push('/login'); return; }
-    if (!prompt.trim()) return;
+    const activePrompt = overridePrompt || prompt;
+    if (!activePrompt.trim()) return;
 
     // Calculate dimensions from resolution + aspect ratio
     const { base } = resolutionMap[resolution];
@@ -220,8 +233,6 @@ export default function CreateImagePage() {
     const maxDim = base;
     const calculatedWidth = rw >= rh ? maxDim : Math.round(maxDim * (rw / rh));
     const calculatedHeight = rh >= rw ? maxDim : Math.round(maxDim * (rh / rw));
-    setWidth(calculatedWidth);
-    setHeight(calculatedHeight);
 
     // Check credits: 2算力点/张
     const cost = 2;
@@ -230,8 +241,24 @@ export default function CreateImagePage() {
       return;
     }
 
-    setLoading(true);
-    setResultUrl('');
+    // Create task entry
+    const taskId = `img_${Date.now()}_${++taskIdCounter.current}`;
+    const newTask: ImageTask = {
+      id: taskId,
+      prompt: activePrompt,
+      status: 'generating',
+      resultUrl: '',
+      error: '',
+      workId: '',
+      editingPrompt: activePrompt,
+      isEditing: false,
+      createdAt: Date.now(),
+    };
+    setTasks(prev => [newTask, ...prev]);
+
+    // Clear prompt for next input
+    if (!overridePrompt) setPrompt('');
+
     try {
       const res = await fetch('/api/ai/image', {
         method: 'POST',
@@ -240,12 +267,16 @@ export default function CreateImagePage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, size: `${calculatedWidth}*${calculatedHeight}`, model_endpoint: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
+        body: JSON.stringify({ prompt: activePrompt, size: `${calculatedWidth}*${calculatedHeight}`, model_endpoint: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
       });
       const data = await res.json();
       const imageUrl = data.image_urls?.[0] || data.image_url;
       if (imageUrl) {
-        setResultUrl(imageUrl);
+        setTasks(prev => prev.map(t =>
+          t.id === taskId
+            ? { ...t, status: 'succeeded' as const, resultUrl: imageUrl, workId: data.work_id || '', editingPrompt: activePrompt }
+            : t
+        ));
         if (data.remaining_credits !== undefined) {
           updateCredits(data.remaining_credits);
         }
@@ -254,12 +285,18 @@ export default function CreateImagePage() {
           setUnsavedWorkIds(prev => [...prev, data.work_id]);
         }
       } else {
-        alert(data.error || '生成失败');
+        setTasks(prev => prev.map(t =>
+          t.id === taskId
+            ? { ...t, status: 'failed' as const, error: data.error || '生成失败' }
+            : t
+        ));
       }
     } catch {
-      alert('生成失败，请重试');
-    } finally {
-      setLoading(false);
+      setTasks(prev => prev.map(t =>
+        t.id === taskId
+          ? { ...t, status: 'failed' as const, error: '生成失败，请重试' }
+          : t
+      ));
     }
   };
 
@@ -314,6 +351,39 @@ export default function CreateImagePage() {
     setPrompt(tpl.prompt_template);
     setSelectedStyle(tpl.sub_category);
   };
+
+  // Task actions
+  const handleRemoveTask = (taskId: string) => {
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+  };
+
+  const handleToggleEdit = (taskId: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, isEditing: !t.isEditing, editingPrompt: t.isEditing ? t.editingPrompt : t.prompt } : t
+    ));
+  };
+
+  const handleSaveEdit = (taskId: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, prompt: t.editingPrompt, isEditing: false } : t
+    ));
+  };
+
+  const handleEditPromptChange = (taskId: string, value: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === taskId ? { ...t, editingPrompt: value } : t
+    ));
+  };
+
+  const handleRegenerate = (taskId: string) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    // Remove old task, generate with new prompt
+    setTasks(prev => prev.filter(t => t.id !== taskId));
+    handleGenerate(task.prompt);
+  };
+
+  const generatingCount = tasks.filter(t => t.status === 'generating').length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -458,39 +528,175 @@ export default function CreateImagePage() {
                   rows={4}
                   className="resize-none"
                 />
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
                     消耗 <span className="text-cyan-400 font-bold">2</span> 算力点/张
                   </div>
+                  {generatingCount > 0 && (
+                    <div className="text-sm text-amber-400 flex items-center gap-1">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {generatingCount}个任务进行中
+                    </div>
+                  )}
                 </div>
                 <Button
                   className="w-full bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-medium"
-                  onClick={handleGenerate}
-                  disabled={loading || !prompt.trim()}
+                  onClick={() => handleGenerate()}
+                  disabled={!prompt.trim()}
                 >
-                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                  {loading ? '生成中...' : '开始生成'}
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  开始生成
                 </Button>
               </CardContent>
             </Card>
 
-            {/* Result */}
-            {resultUrl && (
-              <Card className="border-border/50">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">生成结果</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="relative rounded-lg overflow-hidden bg-muted">
-                    <img src={resultUrl} alt="Generated" className="w-full object-contain max-h-[600px]" />
-                  </div>
-                  <div className="flex gap-3 mt-4">
-                    <Button variant="outline" className="flex-1" onClick={() => window.open(resultUrl, '_blank')}>
-                      <Download className="w-4 h-4 mr-2" /> 下载图片
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Task Queue */}
+            {tasks.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">任务列表</h2>
+                  <span className="text-xs text-muted-foreground">{tasks.length}个任务</span>
+                </div>
+                {tasks.map((task) => (
+                  <Card key={task.id} className="border-border/50 overflow-hidden">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-4">
+                        {/* Status indicator + preview */}
+                        <div className="shrink-0">
+                          {task.status === 'generating' ? (
+                            <div className="w-24 h-24 rounded-lg bg-muted flex items-center justify-center">
+                              <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+                            </div>
+                          ) : task.status === 'succeeded' && task.resultUrl ? (
+                            <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted">
+                              <img src={task.resultUrl} alt="Result" className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="w-24 h-24 rounded-lg bg-red-500/10 flex items-center justify-center">
+                              <XCircle className="w-8 h-8 text-red-400" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Task info */}
+                        <div className="flex-1 min-w-0 space-y-2">
+                          {/* Status badge */}
+                          <div className="flex items-center gap-2">
+                            {task.status === 'generating' && (
+                              <Badge variant="outline" className="text-violet-400 border-violet-400/30 bg-violet-400/10">
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />生成中
+                              </Badge>
+                            )}
+                            {task.status === 'succeeded' && (
+                              <Badge variant="outline" className="text-emerald-400 border-emerald-400/30 bg-emerald-400/10">
+                                <CheckCircle2 className="w-3 h-3 mr-1" />已完成
+                              </Badge>
+                            )}
+                            {task.status === 'failed' && (
+                              <Badge variant="outline" className="text-red-400 border-red-400/30 bg-red-400/10">
+                                <XCircle className="w-3 h-3 mr-1" />失败
+                              </Badge>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              <Clock className="w-3 h-3 inline mr-1" />
+                              {new Date(task.createdAt).toLocaleTimeString()}
+                            </span>
+                          </div>
+
+                          {/* Prompt - editable */}
+                          {task.isEditing ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={task.editingPrompt}
+                                onChange={(e) => handleEditPromptChange(task.id, e.target.value)}
+                                rows={2}
+                                className="resize-none text-sm"
+                              />
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" onClick={() => handleToggleEdit(task.id)}>
+                                  取消
+                                </Button>
+                                <Button size="sm" className="bg-violet-500 hover:bg-violet-600 text-white" onClick={() => handleSaveEdit(task.id)}>
+                                  <Check className="w-3.5 h-3.5 mr-1" />保存
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground line-clamp-2">{task.prompt}</p>
+                          )}
+
+                          {/* Error message */}
+                          {task.status === 'failed' && task.error && (
+                            <p className="text-xs text-red-400">{task.error}</p>
+                          )}
+
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-2 pt-1">
+                            {task.status === 'succeeded' && !task.isEditing && (
+                              <>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                  onClick={() => handleToggleEdit(task.id)}
+                                >
+                                  <Pencil className="w-3.5 h-3.5 mr-1" />修改提示词
+                                </Button>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-violet-400 hover:text-violet-300"
+                                  onClick={() => handleRegenerate(task.id)}
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 mr-1" />重新生成
+                                </Button>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-sky-400 hover:text-sky-300"
+                                  onClick={() => window.open(task.resultUrl, '_blank')}
+                                >
+                                  <Download className="w-3.5 h-3.5 mr-1" />下载
+                                </Button>
+                              </>
+                            )}
+                            {task.status === 'failed' && !task.isEditing && (
+                              <>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                  onClick={() => handleToggleEdit(task.id)}
+                                >
+                                  <Pencil className="w-3.5 h-3.5 mr-1" />修改提示词
+                                </Button>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-violet-400 hover:text-violet-300"
+                                  onClick={() => handleRegenerate(task.id)}
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 mr-1" />重新生成
+                                </Button>
+                              </>
+                            )}
+                            <div className="flex-1" />
+                            <Button
+                              size="sm" variant="ghost"
+                              className="h-7 text-xs text-muted-foreground hover:text-red-400"
+                              onClick={() => handleRemoveTask(task.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Full-size result for succeeded tasks */}
+                      {task.status === 'succeeded' && task.resultUrl && (
+                        <div className="mt-3 relative rounded-lg overflow-hidden bg-muted">
+                          <img src={task.resultUrl} alt="Generated" className="w-full object-contain max-h-[500px]" />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </div>
 

@@ -10,7 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Film, Play, Upload, Download, Sparkles, Loader2, Video, Clapperboard, ZoomIn,
-  X, Plus, Music, PlayCircle, PauseCircle, Trash2, ChevronDown, FolderPlus
+  X, Plus, Music, PlayCircle, PauseCircle, Trash2, ChevronDown, FolderPlus,
+  RefreshCw, Pencil, Check, Clock, CheckCircle2, XCircle
 } from 'lucide-react';
 
 interface Template {
@@ -31,6 +32,19 @@ interface AIModel {
   description: string;
 }
 
+interface VideoTask {
+  id: string;
+  taskId: string; // server task_id for polling
+  prompt: string;
+  status: 'queued' | 'processing' | 'succeeded' | 'failed';
+  statusText: string;
+  resultUrl: string;
+  error: string;
+  editingPrompt: string;
+  isEditing: boolean;
+  createdAt: number;
+}
+
 const videoStyles = [
   { id: 'short_film', name: '短视频口播', icon: '🎬', desc: '口播短视频' },
   { id: 'film_scene', name: '影视短片', icon: '🎥', desc: '电影级场景' },
@@ -48,9 +62,6 @@ export default function CreateVideoPage() {
   const [prompt, setPrompt] = useState('');
   const [mode, setMode] = useState<'text2video' | 'img2video' | 'extend' | 'enhance'>('text2video');
   const [duration, setDuration] = useState(5);
-  const [loading, setLoading] = useState(false);
-  const [pollingStatus, setPollingStatus] = useState<string>(''); // 排队中/渲染中
-  const [resultUrl, setResultUrl] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [videoRatio, setVideoRatio] = useState<string>('16:9');
   const [videoQuality, setVideoQuality] = useState<'480P' | '720P' | '1080P'>('720P');
@@ -77,6 +88,11 @@ export default function CreateVideoPage() {
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
+  // Multi-task queue
+  const [tasks, setTasks] = useState<VideoTask[]>([]);
+  const taskIdCounter = useRef(0);
+  const pollingIntervals = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+
   // 未保存到项目的视频任务追踪
   const [unsavedTaskIds, setUnsavedTaskIds] = useState<string[]>([]);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -99,7 +115,6 @@ export default function CreateVideoPage() {
       const data = await res.json();
       if (data.models) {
         setModels(data.models);
-        // 恢复上次选择的模型
         const saved = localStorage.getItem('selected_video_model');
         if (saved && data.models.some((m: AIModel) => m.endpoint_id === saved)) {
           setSelectedModelEndpoint(saved);
@@ -129,6 +144,13 @@ export default function CreateVideoPage() {
   }, []);
 
   useEffect(() => { fetchTemplates(); fetchModels(); fetchProjects(); }, [fetchTemplates, fetchModels, fetchProjects]);
+
+  // Cleanup polling intervals on unmount
+  useEffect(() => {
+    return () => {
+      pollingIntervals.current.forEach(interval => clearInterval(interval));
+    };
+  }, []);
 
   // 离开页面保护：有未保存视频任务时提示
   const hasUnsavedWork = unsavedTaskIds.length > 0;
@@ -254,7 +276,6 @@ export default function CreateVideoPage() {
       alert('仅支持 MP3 格式音频文件');
       return;
     }
-    // Clean up previous
     if (audioFile) {
       URL.revokeObjectURL(audioFile.preview);
       setAudioPlaying(false);
@@ -308,15 +329,97 @@ export default function CreateVideoPage() {
     if (e.dataTransfer.files.length > 0) handleAudioFile(e.dataTransfer.files);
   };
 
-  const handleGenerate = async () => {
+  // Start polling for a video task
+  const startPolling = (localTaskId: string, serverTaskId: string) => {
+    // Clear existing interval if any
+    const existingInterval = pollingIntervals.current.get(localTaskId);
+    if (existingInterval) clearInterval(existingInterval);
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/ai/video/status?task_id=${serverTaskId}`, {
+          credentials: 'include',
+          headers: getAuthHeaders(),
+        });
+        const data = await res.json();
+
+        // Update status text
+        if (data.status_text) {
+          setTasks(prev => prev.map(t =>
+            t.id === localTaskId ? { ...t, statusText: data.status_text } : t
+          ));
+        }
+
+        // Update status
+        if (data.status === 'processing' || data.status === 'queued') {
+          setTasks(prev => prev.map(t =>
+            t.id === localTaskId ? { ...t, status: data.status } : t
+          ));
+        }
+
+        // Success
+        if (data.status === 'succeeded' && data.video_url) {
+          clearInterval(interval);
+          pollingIntervals.current.delete(localTaskId);
+          setTasks(prev => prev.map(t =>
+            t.id === localTaskId ? { ...t, status: 'succeeded' as const, resultUrl: data.video_url, statusText: '生成完成' } : t
+          ));
+          return;
+        }
+
+        // Failed/timeout/refunded
+        if (['failed', 'timeout', 'refunded'].includes(data.status)) {
+          clearInterval(interval);
+          pollingIntervals.current.delete(localTaskId);
+          setTasks(prev => prev.map(t =>
+            t.id === localTaskId ? { ...t, status: 'failed' as const, error: data.error_message || '视频生成失败', statusText: '生成失败' } : t
+          ));
+          return;
+        }
+      } catch {
+        // Polling error, continue
+      }
+    }, 3000);
+
+    pollingIntervals.current.set(localTaskId, interval);
+
+    // Max polling: 16 minutes
+    setTimeout(() => {
+      if (pollingIntervals.current.has(localTaskId)) {
+        clearInterval(interval);
+        pollingIntervals.current.delete(localTaskId);
+      }
+    }, 16 * 60 * 1000);
+  };
+
+  const handleGenerate = async (overridePrompt?: string) => {
     if (!user) { router.push('/login'); return; }
+    const activePrompt = overridePrompt || prompt;
+    if (!activePrompt.trim()) return;
+
     // 3算力点/秒 × 时长
     const cost = 3 * duration;
     if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
 
-    setLoading(true);
-    setResultUrl('');
-    setPollingStatus('提交中...');
+    // Create local task entry
+    const localTaskId = `vid_${Date.now()}_${++taskIdCounter.current}`;
+    const newTask: VideoTask = {
+      id: localTaskId,
+      taskId: '',
+      prompt: activePrompt,
+      status: 'queued',
+      statusText: '提交中...',
+      resultUrl: '',
+      error: '',
+      editingPrompt: activePrompt,
+      isEditing: false,
+      createdAt: Date.now(),
+    };
+    setTasks(prev => [newTask, ...prev]);
+
+    // Clear prompt for next input
+    if (!overridePrompt) setPrompt('');
+
     try {
       const res = await fetch('/api/ai/video', {
         method: 'POST',
@@ -325,88 +428,92 @@ export default function CreateVideoPage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
+        body: JSON.stringify({ prompt: activePrompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
       });
       const data = await res.json();
 
       if (!res.ok || data.error) {
-        alert(data.error || '生成失败');
+        setTasks(prev => prev.map(t =>
+          t.id === localTaskId ? { ...t, status: 'failed', error: data.error || '生成失败', statusText: '提交失败' } : t
+        ));
         return;
       }
 
-      // 更新算力余额
+      // Update credits
       if (data.remaining_credits !== undefined) {
         updateCredits(data.remaining_credits);
       }
 
-      // 如果没有选择项目，记录为未保存任务
-      if (!selectedProjectId && data.task_id) {
-        setUnsavedTaskIds(prev => [...prev, data.task_id]);
+      const serverTaskId = data.task_id;
+
+      // Track unsaved tasks
+      if (!selectedProjectId && serverTaskId) {
+        setUnsavedTaskIds(prev => [...prev, serverTaskId]);
       }
 
-      // 异步任务模式：轮询状态
-      const taskId = data.task_id;
-      if (!taskId) {
-        // 兼容旧版同步返回
+      if (serverTaskId) {
+        // Async task: start polling
+        setTasks(prev => prev.map(t =>
+          t.id === localTaskId ? { ...t, taskId: serverTaskId, status: 'queued', statusText: '排队中...' } : t
+        ));
+        startPolling(localTaskId, serverTaskId);
+      } else {
+        // Sync fallback
         const videoUrl = data.video_url || data.videoUrl || data.url;
-        if (videoUrl) setResultUrl(videoUrl);
-        return;
-      }
-
-      setPollingStatus('排队中...');
-      const videoUrl = await pollTaskStatus(taskId);
-      if (videoUrl) {
-        setResultUrl(videoUrl);
+        if (videoUrl) {
+          setTasks(prev => prev.map(t =>
+            t.id === localTaskId ? { ...t, status: 'succeeded', resultUrl: videoUrl, statusText: '生成完成' } : t
+          ));
+        } else {
+          setTasks(prev => prev.map(t =>
+            t.id === localTaskId ? { ...t, status: 'failed', error: '未获取到视频URL', statusText: '生成失败' } : t
+          ));
+        }
       }
     } catch {
-      alert('生成失败，请重试');
-    } finally {
-      setLoading(false);
-      setPollingStatus('');
+      setTasks(prev => prev.map(t =>
+        t.id === localTaskId ? { ...t, status: 'failed', error: '生成失败，请重试', statusText: '提交失败' } : t
+      ));
     }
   };
 
-  /** 轮询任务状态，返回视频URL或空字符串 */
-  const pollTaskStatus = (taskId: string): Promise<string> => {
-    return new Promise((resolve) => {
-      const interval = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/ai/video/status?task_id=${taskId}`, {
-            credentials: 'include',
-            headers: getAuthHeaders(),
-          });
-          const data = await res.json();
-
-          if (data.status_text) {
-            setPollingStatus(data.status_text);
-          }
-
-          // 成功
-          if (data.status === 'succeeded' && data.video_url) {
-            clearInterval(interval);
-            resolve(data.video_url);
-            return;
-          }
-
-          // 失败/超时/已退算力
-          if (['failed', 'timeout', 'refunded'].includes(data.status)) {
-            clearInterval(interval);
-            alert(data.error_message || '视频生成失败');
-            resolve('');
-            return;
-          }
-        } catch {
-          // 轮询异常，继续尝试
-        }
-      }, 3000); // 每3秒轮询
-
-      // 最多轮询16分钟（略大于后端15分钟超时）
-      setTimeout(() => {
-        clearInterval(interval);
-        resolve('');
-      }, 16 * 60 * 1000);
-    });
+  // Task actions
+  const handleRemoveTask = (localTaskId: string) => {
+    const interval = pollingIntervals.current.get(localTaskId);
+    if (interval) {
+      clearInterval(interval);
+      pollingIntervals.current.delete(localTaskId);
+    }
+    setTasks(prev => prev.filter(t => t.id !== localTaskId));
   };
+
+  const handleToggleEdit = (localTaskId: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === localTaskId ? { ...t, isEditing: !t.isEditing, editingPrompt: t.isEditing ? t.editingPrompt : t.prompt } : t
+    ));
+  };
+
+  const handleSaveEdit = (localTaskId: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === localTaskId ? { ...t, prompt: t.editingPrompt, isEditing: false } : t
+    ));
+  };
+
+  const handleEditPromptChange = (localTaskId: string, value: string) => {
+    setTasks(prev => prev.map(t =>
+      t.id === localTaskId ? { ...t, editingPrompt: value } : t
+    ));
+  };
+
+  const handleRegenerate = (localTaskId: string) => {
+    const task = tasks.find(t => t.id === localTaskId);
+    if (!task) return;
+    // Remove old task, generate with new prompt
+    handleRemoveTask(localTaskId);
+    handleGenerate(task.prompt);
+  };
+
+  const activeCount = tasks.filter(t => t.status === 'queued' || t.status === 'processing').length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -570,34 +677,175 @@ export default function CreateVideoPage() {
                   </div>
                 )}
 
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
                     消耗 <span className="text-cyan-400 font-bold">{3 * duration}</span> 算力点（3点/秒×{duration}秒）
                   </div>
+                  {activeCount > 0 && (
+                    <div className="text-sm text-amber-400 flex items-center gap-1">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      {activeCount}个任务进行中
+                    </div>
+                  )}
                 </div>
                 <Button
                   className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium"
-                  onClick={handleGenerate}
-                  disabled={loading || !prompt.trim()}
+                  onClick={() => handleGenerate()}
+                  disabled={!prompt.trim()}
                 >
-                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                  {loading ? (pollingStatus || '生成中...') : '开始生成视频'}
+                  <Sparkles className="w-4 h-4 mr-2" />
+                  开始生成视频
                 </Button>
               </CardContent>
             </Card>
 
-            {resultUrl && (
-              <Card className="border-border/50">
-                <CardHeader className="pb-3"><CardTitle className="text-base">生成结果</CardTitle></CardHeader>
-                <CardContent>
-                  <video src={resultUrl} controls className="w-full rounded-lg max-h-[500px]" />
-                  <div className="flex gap-3 mt-4">
-                    <Button variant="outline" className="flex-1" onClick={() => window.open(resultUrl, '_blank')}>
-                      <Download className="w-4 h-4 mr-2" /> 下载视频
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+            {/* Task Queue */}
+            {tasks.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-lg font-semibold">任务列表</h2>
+                  <span className="text-xs text-muted-foreground">{tasks.length}个任务</span>
+                </div>
+                {tasks.map((task) => (
+                  <Card key={task.id} className="border-border/50 overflow-hidden">
+                    <CardContent className="p-4">
+                      <div className="flex items-start gap-4">
+                        {/* Status indicator + preview */}
+                        <div className="shrink-0">
+                          {task.status === 'queued' || task.status === 'processing' ? (
+                            <div className="w-24 h-24 rounded-lg bg-muted flex items-center justify-center">
+                              <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
+                            </div>
+                          ) : task.status === 'succeeded' && task.resultUrl ? (
+                            <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted">
+                              <video src={task.resultUrl} className="w-full h-full object-cover" />
+                            </div>
+                          ) : (
+                            <div className="w-24 h-24 rounded-lg bg-red-500/10 flex items-center justify-center">
+                              <XCircle className="w-8 h-8 text-red-400" />
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Task info */}
+                        <div className="flex-1 min-w-0 space-y-2">
+                          {/* Status badge */}
+                          <div className="flex items-center gap-2">
+                            {(task.status === 'queued' || task.status === 'processing') && (
+                              <Badge variant="outline" className="text-cyan-400 border-cyan-400/30 bg-cyan-400/10">
+                                <Loader2 className="w-3 h-3 mr-1 animate-spin" />{task.statusText || '处理中'}
+                              </Badge>
+                            )}
+                            {task.status === 'succeeded' && (
+                              <Badge variant="outline" className="text-emerald-400 border-emerald-400/30 bg-emerald-400/10">
+                                <CheckCircle2 className="w-3 h-3 mr-1" />已完成
+                              </Badge>
+                            )}
+                            {task.status === 'failed' && (
+                              <Badge variant="outline" className="text-red-400 border-red-400/30 bg-red-400/10">
+                                <XCircle className="w-3 h-3 mr-1" />失败
+                              </Badge>
+                            )}
+                            <span className="text-xs text-muted-foreground">
+                              <Clock className="w-3 h-3 inline mr-1" />
+                              {new Date(task.createdAt).toLocaleTimeString()}
+                            </span>
+                          </div>
+
+                          {/* Prompt - editable */}
+                          {task.isEditing ? (
+                            <div className="space-y-2">
+                              <Textarea
+                                value={task.editingPrompt}
+                                onChange={(e) => handleEditPromptChange(task.id, e.target.value)}
+                                rows={2}
+                                className="resize-none text-sm"
+                              />
+                              <div className="flex gap-2">
+                                <Button size="sm" variant="outline" onClick={() => handleToggleEdit(task.id)}>
+                                  取消
+                                </Button>
+                                <Button size="sm" className="bg-cyan-500 hover:bg-cyan-600 text-white" onClick={() => handleSaveEdit(task.id)}>
+                                  <Check className="w-3.5 h-3.5 mr-1" />保存
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground line-clamp-2">{task.prompt}</p>
+                          )}
+
+                          {/* Error message */}
+                          {task.status === 'failed' && task.error && (
+                            <p className="text-xs text-red-400">{task.error}</p>
+                          )}
+
+                          {/* Action buttons */}
+                          <div className="flex items-center gap-2 pt-1">
+                            {task.status === 'succeeded' && !task.isEditing && (
+                              <>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                  onClick={() => handleToggleEdit(task.id)}
+                                >
+                                  <Pencil className="w-3.5 h-3.5 mr-1" />修改提示词
+                                </Button>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-cyan-400 hover:text-cyan-300"
+                                  onClick={() => handleRegenerate(task.id)}
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 mr-1" />重新生成
+                                </Button>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-sky-400 hover:text-sky-300"
+                                  onClick={() => window.open(task.resultUrl, '_blank')}
+                                >
+                                  <Download className="w-3.5 h-3.5 mr-1" />下载
+                                </Button>
+                              </>
+                            )}
+                            {task.status === 'failed' && !task.isEditing && (
+                              <>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                                  onClick={() => handleToggleEdit(task.id)}
+                                >
+                                  <Pencil className="w-3.5 h-3.5 mr-1" />修改提示词
+                                </Button>
+                                <Button
+                                  size="sm" variant="ghost"
+                                  className="h-7 text-xs text-cyan-400 hover:text-cyan-300"
+                                  onClick={() => handleRegenerate(task.id)}
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5 mr-1" />重新生成
+                                </Button>
+                              </>
+                            )}
+                            <div className="flex-1" />
+                            <Button
+                              size="sm" variant="ghost"
+                              className="h-7 text-xs text-muted-foreground hover:text-red-400"
+                              onClick={() => handleRemoveTask(task.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Full-size result for succeeded tasks */}
+                      {task.status === 'succeeded' && task.resultUrl && (
+                        <div className="mt-3 relative rounded-lg overflow-hidden bg-muted">
+                          <video src={task.resultUrl} controls className="w-full max-h-[500px]" />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
             )}
           </div>
 
