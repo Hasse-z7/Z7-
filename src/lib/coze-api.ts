@@ -8,8 +8,10 @@ import {
 } from 'coze-coding-dev-sdk';
 import type { NextRequest } from 'next/server';
 
-// Shared config - API credentials auto-loaded from env vars
-const config = new Config();
+// Shared config - use provided API key or auto-load from env vars
+const config = new Config({
+  apiKey: process.env.COZE_API_KEY || undefined,
+});
 
 // Video SDK types (mirrored from coze-coding-dev-sdk/dist/types/video/models)
 interface VideoImageURL { url: string }

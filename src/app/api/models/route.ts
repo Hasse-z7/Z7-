@@ -77,8 +77,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '模型名称、接入点ID、类型为必填项' }, { status: 400 });
     }
 
-    if (!['image', 'video'].includes(category)) {
-      return NextResponse.json({ error: '类型必须是 image 或 video' }, { status: 400 });
+    if (!['image', 'video', 'tts', 'llm'].includes(category)) {
+      return NextResponse.json({ error: '类型必须是 image、video、tts 或 llm' }, { status: 400 });
     }
 
     const supabase = getAdminClient();
