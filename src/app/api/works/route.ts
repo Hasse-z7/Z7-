@@ -1,6 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function cleanupExpiredWorks(supabase: any, userId: string) {
+  try {
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // 永久删除30天前已软删除的记录（回收站过期）
+    await supabase
+      .from('user_works')
+      .delete()
+      .eq('user_id', userId)
+      .not('deleted_at', 'is', null)
+      .lt('deleted_at', thirtyDaysAgo.toISOString());
+
+    // 软删除30天前未删除的记录（历史记录过期）
+    await supabase
+      .from('user_works')
+      .update({ deleted_at: new Date().toISOString() })
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .lt('created_at', thirtyDaysAgo.toISOString());
+  } catch (err) {
+    console.error('Cleanup expired works error:', err);
+  }
+}
+
 // GET /api/works — 获取作品列表（支持 type, project_id, trash 参数）
 export async function GET(request: NextRequest) {
   try {
@@ -8,6 +34,9 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
     }
+
+    // 每次查询时自动清理过期记录
+    await cleanupExpiredWorks(supabase, user.id);
 
     const { searchParams } = new URL(request.url);
     const workType = searchParams.get('type');

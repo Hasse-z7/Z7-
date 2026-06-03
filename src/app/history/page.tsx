@@ -114,6 +114,7 @@ export default function HistoryPage() {
           <Clock className="h-8 w-8 text-sky-500" />
           <h1 className="text-2xl font-bold">历史记录</h1>
           <span className="text-muted-foreground text-sm">({works.length})</span>
+          <span className="text-xs text-muted-foreground/60 ml-1">· 保留30天</span>
         </div>
         <div className="flex gap-2">
           {selected.size > 0 && (
@@ -193,6 +194,9 @@ export default function HistoryPage() {
                 <div className="mt-2 px-1">
                   <p className="text-xs text-muted-foreground truncate">
                     {work.work_type === 'video' ? '视频' : '图片'} · {work.credits_cost}算力
+                  </p>
+                  <p className="text-xs text-muted-foreground/50 truncate">
+                    剩余{Math.max(0, 30 - Math.floor((Date.now() - new Date(work.created_at).getTime()) / 86400000))}天
                   </p>
                   {work.project_name && (
                     <p className="text-xs text-muted-foreground truncate">
