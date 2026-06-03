@@ -134,14 +134,15 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 我的项目 */}
+      {/* 我的项目 - 仅登录且有项目时显示 */}
+      {user && projects.length > 0 && (
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-2xl font-bold">我的项目</h2>
             <p className="text-muted-foreground mt-1">最近创建的项目，点击进入创作</p>
           </div>
-          {user && hasMore && (
+          {hasMore && (
             <Button
               variant="ghost"
               className="text-cyan-400 hover:text-cyan-300"
@@ -152,64 +153,39 @@ export default function HomePage() {
           )}
         </div>
 
-        {user && projects.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {displayProjects.map((p) => (
-              <Link key={p.id} href={`/history?project_id=${p.id}`}>
-                <Card className="group overflow-hidden border-border/50 hover:border-cyan-500/30 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full">
-                  <div className="h-24 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center relative">
-                    <FolderOpen className="w-10 h-10 text-cyan-400/40 group-hover:text-cyan-400/70 transition-colors" />
-                    {(p.image_count > 0 || p.video_count > 0) && (
-                      <div className="absolute top-2 right-2 flex gap-1">
-                        {p.image_count > 0 && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 flex items-center gap-0.5">
-                            <ImageIcon className="w-2.5 h-2.5" />{p.image_count}
-                          </span>
-                        )}
-                        {p.video_count > 0 && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 flex items-center gap-0.5">
-                            <Video className="w-2.5 h-2.5" />{p.video_count}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  <CardContent className="p-3">
-                    <p className="font-medium text-sm truncate">{p.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(p.created_at).toLocaleDateString('zh-CN')}
-                    </p>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
-        ) : user ? (
-          <div className="text-center py-12 border border-dashed border-border/50 rounded-xl">
-            <FolderOpen className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-muted-foreground">还没有项目，去创作自动创建</p>
-            <Button
-              className="mt-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
-              onClick={() => router.push('/create/image')}
-            >
-              开始创作
-            </Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Card key={i} className="overflow-hidden border-border/30 opacity-50">
-                <div className="h-24 bg-gradient-to-br from-muted/30 to-muted/10 flex items-center justify-center">
-                  <FolderOpen className="w-10 h-10 text-muted-foreground/20" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {displayProjects.map((p) => (
+            <Link key={p.id} href={`/history?project_id=${p.id}`}>
+              <Card className="group overflow-hidden border-border/50 hover:border-cyan-500/30 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full">
+                <div className="h-24 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center relative">
+                  <FolderOpen className="w-10 h-10 text-cyan-400/40 group-hover:text-cyan-400/70 transition-colors" />
+                  {(p.image_count > 0 || p.video_count > 0) && (
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      {p.image_count > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 flex items-center gap-0.5">
+                          <ImageIcon className="w-2.5 h-2.5" />{p.image_count}
+                        </span>
+                      )}
+                      {p.video_count > 0 && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 flex items-center gap-0.5">
+                          <Video className="w-2.5 h-2.5" />{p.video_count}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <CardContent className="p-3">
-                  <p className="font-medium text-sm text-muted-foreground">登录后查看</p>
+                  <p className="font-medium text-sm truncate">{p.name}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {new Date(p.created_at).toLocaleDateString('zh-CN')}
+                  </p>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
+            </Link>
+          ))}
+        </div>
       </section>
+      )}
 
       {/* CTA */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
