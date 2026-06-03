@@ -712,26 +712,7 @@ export default function CreateVideoPage() {
           </div>
 
           <div className="space-y-4">
-            {/* Project Selection */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">项目选择</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <select
-                  value={selectedProjectId || ''}
-                  onChange={(e) => setSelectedProjectId(e.target.value)}
-                  className="w-full appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2.5 text-sm text-foreground transition-colors hover:bg-muted focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                >
-                  <option value="">不选择项目</option>
-                  {projects.map((p) => (
-                    <option key={p.id} value={p.id}>{p.name}</option>
-                  ))}
-                </select>
-              </CardContent>
-            </Card>
-
-            {/* Model Selection */}
+{/* Model Selection */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold">模型选择</CardTitle>

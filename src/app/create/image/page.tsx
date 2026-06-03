@@ -523,32 +523,7 @@ export default function CreateImagePage() {
 
           {/* Right: Parameters & Templates */}
           <div className="space-y-4">
-            {/* Project Selection */}
-            <Card className="border-border/50">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-semibold">项目</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="relative">
-                  <select
-                    value={selectedProjectId}
-                    onChange={(e) => {
-                      setSelectedProjectId(e.target.value);
-                      localStorage.setItem('selected_project_id', e.target.value);
-                    }}
-                    className="w-full appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2.5 pr-10 text-sm text-foreground transition-colors hover:bg-muted focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  >
-                    <option value="">不选择项目</option>
-                    {projects.map((p: { id: string; name: string }) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Model Selection */}
+{/* Model Selection */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold">模型选择</CardTitle>
