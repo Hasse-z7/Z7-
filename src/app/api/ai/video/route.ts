@@ -218,6 +218,7 @@ export async function POST(request: NextRequest) {
       status: 'queued',
       credits_cost: creditsCost,
       remaining_credits: deduction.newTotalCredits,
+      project_id: resolvedProjectId,
     });
 
   } catch (error: unknown) {

@@ -262,6 +262,13 @@ export default function CreateVideoPage() {
         updateCredits(data.remaining_credits);
       }
 
+      // 如果后端自动创建了项目，刷新项目列表并自动选中
+      if (data.project_id && !selectedProjectId) {
+        fetchProjects();
+        setSelectedProjectId(data.project_id);
+        localStorage.setItem('selected_project_id', data.project_id);
+      }
+
       // 异步任务模式：轮询状态
       const taskId = data.task_id;
       if (!taskId) {

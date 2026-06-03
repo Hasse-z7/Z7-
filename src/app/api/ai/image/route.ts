@@ -128,6 +128,7 @@ export async function POST(request: NextRequest) {
       image_urls: generatedUrls,
       credits_cost: creditsCost,
       remaining_credits: deduction.newTotalCredits,
+      project_id: resolvedProjectId,
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : '生成失败';

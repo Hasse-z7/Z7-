@@ -172,6 +172,12 @@ export default function CreateImagePage() {
         if (data.remaining_credits !== undefined) {
           updateCredits(data.remaining_credits);
         }
+        // 如果后端自动创建了项目，刷新项目列表并自动选中
+        if (data.project_id && !selectedProjectId) {
+          fetchProjects();
+          setSelectedProjectId(data.project_id);
+          localStorage.setItem('selectedProjectId_image', data.project_id);
+        }
       } else {
         alert(data.error || '生成失败');
       }
