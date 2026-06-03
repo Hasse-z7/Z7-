@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
   Sparkles, Loader2, Music, PlayCircle, PauseCircle, Trash2, ChevronDown, FolderPlus,
-  RefreshCw, Pencil, Check, Clock, CheckCircle2, XCircle, Download
+  RefreshCw, Pencil, Check, Clock, CheckCircle2, XCircle, Download, X
 } from 'lucide-react';
 
 interface Template {
@@ -80,6 +80,7 @@ export default function CreateVideoPage() {
 
   // 未保存到项目的视频任务追踪
   const [unsavedTaskIds, setUnsavedTaskIds] = useState<string[]>([]);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -578,7 +579,7 @@ export default function CreateVideoPage() {
                               <Loader2 className="w-8 h-8 text-cyan-400 animate-spin" />
                             </div>
                           ) : task.status === 'succeeded' && task.resultUrl ? (
-                            <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted">
+                            <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted cursor-pointer" onClick={() => setLightboxUrl(task.resultUrl!)}>
                               <video src={task.resultUrl} className="w-full h-full object-cover" />
                             </div>
                           ) : (
@@ -898,6 +899,19 @@ export default function CreateVideoPage() {
                 {saving ? '保存中...' : '保存并新建项目'}
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* 视频/图片放大查看 */}
+        {lightboxUrl && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center" onClick={() => setLightboxUrl(null)}>
+            <button
+              className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+              onClick={(e) => { e.stopPropagation(); setLightboxUrl(null); }}
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <video src={lightboxUrl} controls autoPlay className="max-w-[90vw] max-h-[90vh] rounded-lg" onClick={(e) => e.stopPropagation()} />
           </div>
         )}
 

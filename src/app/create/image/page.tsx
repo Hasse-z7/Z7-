@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Download, Sparkles, Loader2,
   ChevronDown, FolderPlus,
-  RefreshCw, Pencil, Check, Trash2, Clock, CheckCircle2, XCircle
+  RefreshCw, Pencil, Check, Trash2, Clock, CheckCircle2, XCircle, X
 } from 'lucide-react';
 
 interface Template {
@@ -87,6 +87,7 @@ export default function CreateImagePage() {
 
   // 未保存到项目的作品追踪
   const [unsavedWorkIds, setUnsavedWorkIds] = useState<string[]>([]);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -509,7 +510,7 @@ export default function CreateImagePage() {
 
                       {/* Full-size result for succeeded tasks */}
                       {task.status === 'succeeded' && task.resultUrl && (
-                        <div className="mt-3 relative rounded-lg overflow-hidden bg-muted">
+                        <div className="mt-3 relative rounded-lg overflow-hidden bg-muted cursor-pointer" onClick={() => setLightboxUrl(task.resultUrl!)}>
                           <img src={task.resultUrl} alt="Generated" className="w-full object-contain max-h-[500px]" />
                         </div>
                       )}
@@ -668,6 +669,19 @@ export default function CreateImagePage() {
                 {saving ? '保存中...' : '保存并新建项目'}
               </Button>
             </div>
+          </div>
+        )}
+
+        {/* 图片放大查看 */}
+        {lightboxUrl && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center" onClick={() => setLightboxUrl(null)}>
+            <button
+              className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+              onClick={(e) => { e.stopPropagation(); setLightboxUrl(null); }}
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <img src={lightboxUrl} alt="Preview" className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg" onClick={(e) => e.stopPropagation()} />
           </div>
         )}
 
