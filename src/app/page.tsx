@@ -1,13 +1,14 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Sparkles, Wand2, Film, Mic, Zap, Crown, ArrowRight,
-  ImageIcon, Video, Music
+  ImageIcon, Video, FolderOpen, MoreHorizontal,
 } from 'lucide-react';
 
 const features = [
@@ -16,19 +17,39 @@ const features = [
   { title: 'AI音乐', desc: '文字生成歌曲，多曲风切换', icon: Mic, href: '/create/music', gradient: 'from-rose-500 to-pink-600', glow: 'bg-rose-500/20' },
 ];
 
-const showcases = [
-  { name: '超写实人像', cat: 'image', icon: ImageIcon, gradient: 'from-violet-500/20 to-purple-500/20' },
-  { name: '二次元少女', cat: 'image', icon: ImageIcon, gradient: 'from-pink-500/20 to-rose-500/20' },
-  { name: '国风水墨', cat: 'image', icon: ImageIcon, gradient: 'from-emerald-500/20 to-teal-500/20' },
-  { name: '赛博朋克', cat: 'image', icon: ImageIcon, gradient: 'from-cyan-500/20 to-blue-500/20' },
-  { name: '影视短片', cat: 'video', icon: Video, gradient: 'from-blue-500/20 to-indigo-500/20' },
-  { name: '风景大片', cat: 'video', icon: Video, gradient: 'from-green-500/20 to-emerald-500/20' },
-  { name: '流行音乐', cat: 'music', icon: Music, gradient: 'from-rose-500/20 to-pink-500/20' },
-];
+interface ProjectItem {
+  id: string;
+  name: string;
+  created_at: string;
+  image_count: number;
+  video_count: number;
+}
 
 export default function HomePage() {
   const { user, profile } = useAuth();
   const router = useRouter();
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+
+  const fetchProjects = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/projects', { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data.projects || []);
+      }
+    } catch {
+      // ignore
+    }
+  }, [user]);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  // 展示两排：桌面4列 × 2行 = 8个
+  const displayProjects = projects.slice(0, 8);
+  const hasMore = projects.length > 8;
 
   return (
     <div className="min-h-screen bg-background">
@@ -113,24 +134,81 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Showcase */}
+      {/* 我的项目 */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <h2 className="text-2xl font-bold mb-2">热门模板</h2>
-        <p className="text-muted-foreground mb-8">精选AI创作模板，一键生成</p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {showcases.map((s, i) => (
-            <Link key={i} href={user ? `/create/${s.cat}` : '/login'}>
-              <Card className="group overflow-hidden border-border/50 hover:border-primary/30 transition-all hover:-translate-y-1 cursor-pointer">
-                <div className={`h-28 bg-gradient-to-br ${s.gradient} flex items-center justify-center`}>
-                  <s.icon className="w-10 h-10 text-foreground/20" />
+        <div className="flex items-center justify-between mb-8">
+          <div>
+            <h2 className="text-2xl font-bold">我的项目</h2>
+            <p className="text-muted-foreground mt-1">最近创建的项目，点击进入创作</p>
+          </div>
+          {user && hasMore && (
+            <Button
+              variant="ghost"
+              className="text-cyan-400 hover:text-cyan-300"
+              onClick={() => router.push('/projects')}
+            >
+              更多 <MoreHorizontal className="w-4 h-4 ml-1" />
+            </Button>
+          )}
+        </div>
+
+        {user && projects.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {displayProjects.map((p) => (
+              <Link key={p.id} href={`/history?project_id=${p.id}`}>
+                <Card className="group overflow-hidden border-border/50 hover:border-cyan-500/30 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full">
+                  <div className="h-24 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center relative">
+                    <FolderOpen className="w-10 h-10 text-cyan-400/40 group-hover:text-cyan-400/70 transition-colors" />
+                    {(p.image_count > 0 || p.video_count > 0) && (
+                      <div className="absolute top-2 right-2 flex gap-1">
+                        {p.image_count > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 flex items-center gap-0.5">
+                            <ImageIcon className="w-2.5 h-2.5" />{p.image_count}
+                          </span>
+                        )}
+                        {p.video_count > 0 && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 flex items-center gap-0.5">
+                            <Video className="w-2.5 h-2.5" />{p.video_count}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <CardContent className="p-3">
+                    <p className="font-medium text-sm truncate">{p.name}</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {new Date(p.created_at).toLocaleDateString('zh-CN')}
+                    </p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        ) : user ? (
+          <div className="text-center py-12 border border-dashed border-border/50 rounded-xl">
+            <FolderOpen className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-muted-foreground">还没有项目，去创作自动创建</p>
+            <Button
+              className="mt-4 bg-gradient-to-r from-cyan-500 to-blue-600 text-white"
+              onClick={() => router.push('/create/image')}
+            >
+              开始创作
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="overflow-hidden border-border/30 opacity-50">
+                <div className="h-24 bg-gradient-to-br from-muted/30 to-muted/10 flex items-center justify-center">
+                  <FolderOpen className="w-10 h-10 text-muted-foreground/20" />
                 </div>
                 <CardContent className="p-3">
-                  <p className="font-medium text-sm">{s.name}</p>
+                  <p className="font-medium text-sm text-muted-foreground">登录后查看</p>
                 </CardContent>
               </Card>
-            </Link>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* CTA */}
