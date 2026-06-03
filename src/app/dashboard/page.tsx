@@ -83,7 +83,7 @@ export default function DashboardPage() {
       });
       if (res.ok) {
         const data = await res.json();
-        window.location.href = `/history?project_id=${data.project?.id}`;
+        window.location.href = `/projects/${data.project?.id}`;
       }
     } catch {
       // ignore
@@ -192,7 +192,7 @@ export default function DashboardPage() {
 
             {/* Project Cards */}
             {projects.slice(0, 7).map((project) => (
-              <Link key={project.id} href={`/history?project_id=${project.id}`}>
+              <Link key={project.id} href={`/projects/${project.id}`}>
                 <Card className="group overflow-hidden border-border/50 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-36">
                   {project.cover_url || project.default_cover ? (
                     <div className="h-full relative">

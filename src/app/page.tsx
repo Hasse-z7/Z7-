@@ -167,7 +167,7 @@ export default function HomePage() {
                 });
                 if (res.ok) {
                   const data = await res.json();
-                  router.push(`/history?project_id=${data.project?.id}`);
+                  router.push(`/projects/${data.project?.id}`);
                 }
               } catch {
                 // ignore
@@ -189,7 +189,7 @@ export default function HomePage() {
           {projects.slice(0, 7).map((p) => {
             const cover = p.cover_url || p.default_cover;
             return (
-            <Link key={p.id} href={`/history?project_id=${p.id}`}>
+            <Link key={p.id} href={`/projects/${p.id}`}>
               <Card className="group overflow-hidden border-border/50 hover:border-cyan-500/30 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full">
                 <div className="h-24 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center relative overflow-hidden">
                   {cover ? (

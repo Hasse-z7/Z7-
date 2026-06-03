@@ -171,7 +171,7 @@ export default function ProjectsPage() {
   };
 
   const openProject = (project: Project) => {
-    router.push(`/history?project_id=${project.id}`);
+    router.push(`/projects/${project.id}`);
   };
 
   const openRename = (project: Project) => {
