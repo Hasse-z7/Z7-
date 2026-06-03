@@ -47,9 +47,7 @@ export default function HomePage() {
     fetchProjects();
   }, [fetchProjects]);
 
-  // 展示两排：桌面4列 × 2行 = 8个
-  const displayProjects = projects.slice(0, 8);
-  const hasMore = projects.length > 8;
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -134,15 +132,15 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* 我的项目 - 仅登录且有项目时显示 */}
-      {user && projects.length > 0 && (
+      {/* 我的项目 - 登录后显示，第一个是新建按钮 */}
+      {user && (
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <div className="flex items-center justify-between mb-8">
           <div>
             <h2 className="text-2xl font-bold">我的项目</h2>
-            <p className="text-muted-foreground mt-1">最近创建的项目，点击进入创作</p>
+            <p className="text-muted-foreground mt-1">管理你的创作项目</p>
           </div>
-          {hasMore && (
+          {projects.length > 8 && (
             <Button
               variant="ghost"
               className="text-cyan-400 hover:text-cyan-300"
@@ -154,7 +152,39 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {displayProjects.map((p) => (
+          {/* 新建项目按钮 - 第一个位置 */}
+          <Card
+            className="group overflow-hidden border-dashed border-2 border-cyan-500/30 hover:border-cyan-500/60 bg-card/30 hover:bg-cyan-500/5 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full"
+            onClick={async () => {
+              const name = `项目 ${new Date().toLocaleDateString('zh-CN')}`;
+              try {
+                const res = await fetch('/api/projects', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                  body: JSON.stringify({ name }),
+                });
+                if (res.ok) {
+                  const data = await res.json();
+                  router.push(`/history?project_id=${data.project?.id}`);
+                }
+              } catch {
+                // ignore
+              }
+            }}
+          >
+            <div className="h-24 flex items-center justify-center">
+              <div className="w-12 h-12 rounded-full bg-cyan-500/10 flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors">
+                <span className="text-2xl text-cyan-400 font-light">+</span>
+              </div>
+            </div>
+            <CardContent className="p-3 text-center">
+              <p className="font-medium text-sm text-cyan-400">新建项目</p>
+              <p className="text-xs text-muted-foreground mt-1">创建新的创作项目</p>
+            </CardContent>
+          </Card>
+
+          {/* 已保存的项目 */}
+          {projects.slice(0, 7).map((p) => (
             <Link key={p.id} href={`/history?project_id=${p.id}`}>
               <Card className="group overflow-hidden border-border/50 hover:border-cyan-500/30 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full">
                 <div className="h-24 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center relative">
