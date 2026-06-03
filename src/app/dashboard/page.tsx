@@ -43,6 +43,8 @@ interface Project {
   created_at: string;
   image_count: number;
   video_count: number;
+  cover_url: string | null;
+  default_cover: string | null;
 }
 
 export default function DashboardPage() {
@@ -192,21 +194,35 @@ export default function DashboardPage() {
             {projects.slice(0, 7).map((project) => (
               <Link key={project.id} href={`/history?project_id=${project.id}`}>
                 <Card className="group overflow-hidden border-border/50 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-36">
-                  <CardContent className="p-4 h-full flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <Folder className="w-4 h-4 text-cyan-400" />
-                        <p className="font-medium text-sm truncate">{project.name}</p>
+                  {project.cover_url || project.default_cover ? (
+                    <div className="h-full relative">
+                      <img src={project.cover_url || project.default_cover || ''} alt={project.name} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent" />
+                      <div className="absolute bottom-0 left-0 right-0 p-3">
+                        <p className="font-medium text-sm truncate text-white">{project.name}</p>
+                        <div className="flex items-center gap-3 text-xs text-white/70">
+                          {project.image_count > 0 && <span>{project.image_count} 图片</span>}
+                          {project.video_count > 0 && <span>{project.video_count} 视频</span>}
+                        </div>
                       </div>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(project.created_at).toLocaleDateString()}
-                      </p>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                      {project.image_count > 0 && <span>{project.image_count} 图片</span>}
-                      {project.video_count > 0 && <span>{project.video_count} 视频</span>}
-                    </div>
-                  </CardContent>
+                  ) : (
+                    <CardContent className="p-4 h-full flex flex-col justify-between">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <Folder className="w-4 h-4 text-cyan-400" />
+                          <p className="font-medium text-sm truncate">{project.name}</p>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(project.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        {project.image_count > 0 && <span>{project.image_count} 图片</span>}
+                        {project.video_count > 0 && <span>{project.video_count} 视频</span>}
+                      </div>
+                    </CardContent>
+                  )}
                 </Card>
               </Link>
             ))}

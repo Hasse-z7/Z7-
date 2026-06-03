@@ -23,6 +23,8 @@ interface ProjectItem {
   created_at: string;
   image_count: number;
   video_count: number;
+  cover_url: string | null;
+  default_cover: string | null;
 }
 
 export default function HomePage() {
@@ -184,20 +186,26 @@ export default function HomePage() {
           </Card>
 
           {/* 已保存的项目 */}
-          {projects.slice(0, 7).map((p) => (
+          {projects.slice(0, 7).map((p) => {
+            const cover = p.cover_url || p.default_cover;
+            return (
             <Link key={p.id} href={`/history?project_id=${p.id}`}>
               <Card className="group overflow-hidden border-border/50 hover:border-cyan-500/30 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-full">
-                <div className="h-24 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center relative">
-                  <FolderOpen className="w-10 h-10 text-cyan-400/40 group-hover:text-cyan-400/70 transition-colors" />
+                <div className="h-24 bg-gradient-to-br from-cyan-500/10 to-blue-500/10 flex items-center justify-center relative overflow-hidden">
+                  {cover ? (
+                    <img src={cover} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                  ) : (
+                    <FolderOpen className="w-10 h-10 text-cyan-400/40 group-hover:text-cyan-400/70 transition-colors" />
+                  )}
                   {(p.image_count > 0 || p.video_count > 0) && (
                     <div className="absolute top-2 right-2 flex gap-1">
                       {p.image_count > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 flex items-center gap-0.5">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 flex items-center gap-0.5 backdrop-blur-sm">
                           <ImageIcon className="w-2.5 h-2.5" />{p.image_count}
                         </span>
                       )}
                       {p.video_count > 0 && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 flex items-center gap-0.5">
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 flex items-center gap-0.5 backdrop-blur-sm">
                           <Video className="w-2.5 h-2.5" />{p.video_count}
                         </span>
                       )}
@@ -212,7 +220,8 @@ export default function HomePage() {
                 </CardContent>
               </Card>
             </Link>
-          ))}
+            );
+          })}
         </div>
       </section>
       )}

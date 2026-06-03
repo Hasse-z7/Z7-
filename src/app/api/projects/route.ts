@@ -21,30 +21,36 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // 获取每个项目的作品数量（未删除的）
+    // 获取每个项目的作品数量和首个作品（用于默认封面）
     const { data: worksCounts, error: countError } = await supabase
       .from('user_works')
-      .select('project_id, work_type')
+      .select('project_id, work_type, file_url')
       .eq('user_id', authResult.user.id)
-      .is('deleted_at', null);
+      .is('deleted_at', null)
+      .order('created_at', { ascending: true });
 
     if (countError) {
       return NextResponse.json({ error: countError.message }, { status: 500 });
     }
 
-    // 统计每个项目的图片/视频数量
-    const countMap: Record<string, { images: number; videos: number }> = {};
+    // 统计每个项目的图片/视频数量，并取第一个作品作为默认封面
+    const countMap: Record<string, { images: number; videos: number; firstWorkUrl: string | null }> = {};
     for (const w of worksCounts || []) {
       if (!w.project_id) continue;
-      if (!countMap[w.project_id]) countMap[w.project_id] = { images: 0, videos: 0 };
+      if (!countMap[w.project_id]) countMap[w.project_id] = { images: 0, videos: 0, firstWorkUrl: null };
       if (w.work_type === 'image') countMap[w.project_id].images++;
       if (w.work_type === 'video') countMap[w.project_id].videos++;
+      // 取第一个作品的file_url作为默认封面
+      if (!countMap[w.project_id].firstWorkUrl && w.file_url) {
+        countMap[w.project_id].firstWorkUrl = w.file_url;
+      }
     }
 
     const enriched = (projects || []).map((p: { id: string; [key: string]: unknown }) => ({
       ...p,
       image_count: countMap[p.id]?.images || 0,
       video_count: countMap[p.id]?.videos || 0,
+      default_cover: countMap[p.id]?.firstWorkUrl || null,
     }));
 
     return NextResponse.json({ projects: enriched });
@@ -102,18 +108,23 @@ export async function PUT(request: NextRequest) {
     }
     const { supabase } = authResult;
     const body = await request.json();
-    const { id, name } = body;
+    const { id, name, cover_url } = body;
 
     if (!id) {
       return NextResponse.json({ error: '缺少项目ID' }, { status: 400 });
     }
-    if (!name || !name.trim()) {
-      return NextResponse.json({ error: '项目名称不能为空' }, { status: 400 });
+
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (name !== undefined && name.trim()) {
+      updates.name = name.trim();
+    }
+    if (cover_url !== undefined) {
+      updates.cover_url = cover_url;
     }
 
     const { data, error } = await supabase
       .from('projects')
-      .update({ name: name.trim(), updated_at: new Date().toISOString() })
+      .update(updates)
       .eq('id', id)
       .eq('user_id', authResult.user.id)
       .select()
