@@ -141,6 +141,47 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ success: true, action: 'permanent_delete' });
     }
 
+    if (action === 'save_to_project') {
+      // 将作品保存到项目（创建项目+关联作品）
+      const { project_name } = body;
+      if (!project_name) {
+        return NextResponse.json({ error: '缺少项目名称' }, { status: 400 });
+      }
+
+      // 创建项目
+      const { data: project, error: projectError } = await supabase
+        .from('projects')
+        .insert({ user_id: user.id, name: project_name })
+        .select('id')
+        .maybeSingle();
+
+      if (projectError || !project) {
+        return NextResponse.json({ error: '创建项目失败' }, { status: 500 });
+      }
+
+      // 更新作品的 project_id
+      const { error: updateError } = await supabase
+        .from('user_works')
+        .update({ project_id: project.id })
+        .in('id', ids)
+        .eq('user_id', user.id)
+        .is('project_id', null);
+
+      if (updateError) {
+        return NextResponse.json({ error: updateError.message }, { status: 500 });
+      }
+
+      // 同时更新关联的视频任务
+      await supabase
+        .from('video_tasks')
+        .update({ project_id: project.id })
+        .in('id', ids)
+        .eq('user_id', user.id)
+        .is('project_id', null);
+
+      return NextResponse.json({ success: true, action: 'save_to_project', project_id: project.id });
+    }
+
     return NextResponse.json({ error: '未知操作' }, { status: 400 });
   } catch (err) {
     const message = err instanceof Error ? err.message : '操作失败';

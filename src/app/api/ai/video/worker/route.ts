@@ -144,13 +144,14 @@ async function processTask(taskId: string): Promise<void> {
         responseData: { videoUrl: result.videoUrl },
       });
 
-      // 保存到用户作品
+      // 保存到用户作品（关联项目的project_id）
       await supabase.from('user_works').insert({
         user_id: task.user_id,
         work_type: 'video',
         file_url: result.videoUrl,
         prompt: task.prompt || '',
         credits_cost: task.credits_cost,
+        project_id: task.project_id || null,
       });
 
       console.info(`[VideoWorker] 任务成功 ${taskId.slice(0, 8)}: 视频=${result.videoUrl.slice(0, 60)}...`);

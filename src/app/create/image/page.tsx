@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
   Wand2, ImageIcon, Upload, Download, Sparkles, Loader2,
-  Palette, Maximize2, Filter, X, Plus, ChevronDown
+  Palette, Maximize2, Filter, X, Plus, ChevronDown, FolderPlus
 } from 'lucide-react';
 
 interface Template {
@@ -88,6 +88,12 @@ export default function CreateImagePage() {
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
+  // 未保存到项目的作品追踪
+  const [unsavedWorkIds, setUnsavedWorkIds] = useState<string[]>([]);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   const fetchTemplates = useCallback(async () => {
     try {
       const res = await fetch('/api/templates?category=image');
@@ -133,6 +139,77 @@ export default function CreateImagePage() {
 
   useEffect(() => { fetchTemplates(); fetchModels(); fetchProjects(); }, [fetchTemplates, fetchModels, fetchProjects]);
 
+  // 离开页面保护：有未保存作品时提示
+  const hasUnsavedWork = unsavedWorkIds.length > 0;
+
+  useEffect(() => {
+    if (!hasUnsavedWork) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    const handlePopState = () => {
+      setShowSaveDialog(true);
+      window.history.pushState(null, '', window.location.href);
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.history.pushState(null, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [hasUnsavedWork]);
+
+  // 保存作品到新建项目
+  const handleSaveToProject = async () => {
+    if (unsavedWorkIds.length === 0) return;
+    setSaving(true);
+    try {
+      const now = new Date();
+      const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}项目`;
+      const res = await fetch('/api/works', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ action: 'save_to_project', ids: unsavedWorkIds, project_name: dateName }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUnsavedWorkIds([]);
+        fetchProjects();
+        if (data.project_id) {
+          setSelectedProjectId(data.project_id);
+          localStorage.setItem('selectedProjectId_image', data.project_id);
+        }
+        setShowSaveDialog(false);
+        if (pendingNavigation) {
+          router.push(pendingNavigation);
+          setPendingNavigation(null);
+        }
+      } else {
+        alert(data.error || '保存失败');
+      }
+    } catch {
+      alert('保存失败，请重试');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // 不保存，直接离开
+  const handleSkipSave = () => {
+    setUnsavedWorkIds([]);
+    setShowSaveDialog(false);
+    if (pendingNavigation) {
+      router.push(pendingNavigation);
+      setPendingNavigation(null);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
     if (!prompt.trim()) return;
@@ -172,11 +249,9 @@ export default function CreateImagePage() {
         if (data.remaining_credits !== undefined) {
           updateCredits(data.remaining_credits);
         }
-        // 如果后端自动创建了项目，刷新项目列表并自动选中
-        if (data.project_id && !selectedProjectId) {
-          fetchProjects();
-          setSelectedProjectId(data.project_id);
-          localStorage.setItem('selectedProjectId_image', data.project_id);
+        // 如果没有选择项目，记录为未保存作品
+        if (!selectedProjectId && data.work_id) {
+          setUnsavedWorkIds(prev => [...prev, data.work_id]);
         }
       } else {
         alert(data.error || '生成失败');
@@ -436,7 +511,7 @@ export default function CreateImagePage() {
                     }}
                     className="w-full appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2.5 pr-10 text-sm text-foreground transition-colors hover:bg-muted focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                   >
-                    <option value="">自动创建项目</option>
+                    <option value="">不选择项目</option>
                     {projects.map((p: { id: string; name: string }) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
@@ -553,6 +628,51 @@ export default function CreateImagePage() {
             ))}
           </div>
         </div>
+
+        {/* 未保存作品提示栏 */}
+        {hasUnsavedWork && !showSaveDialog && (
+          <div className="fixed bottom-0 left-0 right-0 z-40 bg-amber-500/90 backdrop-blur-sm text-white px-6 py-3 flex items-center justify-between">
+            <span className="text-sm font-medium">您有 {unsavedWorkIds.length} 件作品未保存到项目</span>
+            <div className="flex gap-3">
+              <Button size="sm" variant="ghost" className="text-white/80 hover:text-white hover:bg-white/10" onClick={handleSkipSave}>
+                不保存
+              </Button>
+              <Button size="sm" className="bg-white text-amber-600 hover:bg-white/90 font-medium" onClick={handleSaveToProject} disabled={saving}>
+                <FolderPlus className="w-4 h-4 mr-1" />
+                {saving ? '保存中...' : '保存并新建项目'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* 保存确认弹窗 */}
+        {showSaveDialog && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-card border border-border/50 rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <FolderPlus className="w-5 h-5 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground">保存到项目</h3>
+                  <p className="text-sm text-muted-foreground">您有作品未保存到项目</p>
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                是否将 {unsavedWorkIds.length} 件作品保存到新建项目？点击"确定保存"将自动创建项目并关联作品，点击"取消"则不保存。
+              </p>
+              <div className="flex gap-3 justify-end">
+                <Button variant="outline" onClick={handleSkipSave} disabled={saving}>
+                  取消
+                </Button>
+                <Button className="bg-sky-500 hover:bg-sky-600 text-white" onClick={handleSaveToProject} disabled={saving}>
+                  {saving ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <FolderPlus className="w-4 h-4 mr-1" />}
+                  确定保存
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
