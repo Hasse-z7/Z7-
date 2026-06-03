@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Clock, Trash2, Image, Video, Loader2, CheckSquare, Square } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -38,7 +38,7 @@ export default function HistoryPage() {
 
   const fetchWorks = useCallback(async () => {
     try {
-      const res = await fetch('/api/works?include_project=true');
+      const res = await fetch('/api/works?include_project=true', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setWorks(data.works || []);
@@ -83,7 +83,7 @@ export default function HistoryPage() {
     try {
       const res = await fetch('/api/works', {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ ids: Array.from(selected) }),
       });
       if (res.ok) {

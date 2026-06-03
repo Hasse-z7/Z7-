@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Trash2, RotateCcw, Image, Video, Loader2, CheckSquare, Square, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ export default function TrashPage() {
 
   const fetchTrash = useCallback(async () => {
     try {
-      const res = await fetch('/api/works?deleted=true&include_project=true');
+      const res = await fetch('/api/works?deleted=true&include_project=true', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setWorks(data.works || []);
@@ -83,7 +83,7 @@ export default function TrashPage() {
     try {
       const res = await fetch('/api/works', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ action: 'restore', ids: Array.from(selected) }),
       });
       if (res.ok) {
@@ -105,7 +105,7 @@ export default function TrashPage() {
     try {
       const res = await fetch('/api/works', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ action: 'permanent_delete', ids: Array.from(selected) }),
       });
       if (res.ok) {

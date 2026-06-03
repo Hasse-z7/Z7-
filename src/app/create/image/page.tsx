@@ -119,7 +119,7 @@ export default function CreateImagePage() {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetch('/api/projects', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);

@@ -108,7 +108,7 @@ export default function CreateVideoPage() {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetch('/api/projects', { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.projects) {
         setProjects(data.projects);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useAuth } from '@/contexts/auth-context';
+import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { FolderOpen, Plus, Pencil, Trash2, Image, Video, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -39,7 +39,7 @@ export default function ProjectsPage() {
 
   const fetchProjects = useCallback(async () => {
     try {
-      const res = await fetch('/api/projects');
+      const res = await fetch('/api/projects', { headers: getAuthHeaders() });
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
@@ -65,7 +65,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ name: newName.trim() }),
       });
       if (res.ok) {
@@ -87,7 +87,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetch(`/api/projects?id=${selectedProject.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({ name: newName.trim() }),
       });
       if (res.ok) {
@@ -110,6 +110,7 @@ export default function ProjectsPage() {
     try {
       const res = await fetch(`/api/projects?id=${selectedProject.id}`, {
         method: 'DELETE',
+        headers: getAuthHeaders(),
       });
       if (res.ok) {
         setDeleteOpen(false);
