@@ -6,12 +6,10 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import {
-  Film, Play, Upload, Download, Sparkles, Loader2, Video, Clapperboard, ZoomIn,
-  X, Plus, Music, PlayCircle, PauseCircle, Trash2, ChevronDown, FolderPlus,
-  RefreshCw, Pencil, Check, Clock, CheckCircle2, XCircle
+  Sparkles, Loader2, Music, PlayCircle, PauseCircle, Trash2, ChevronDown, FolderPlus,
+  RefreshCw, Pencil, Check, Clock, CheckCircle2, XCircle, Download
 } from 'lucide-react';
 
 interface Template {
@@ -45,12 +43,6 @@ interface VideoTask {
   createdAt: number;
 }
 
-const videoStyles = [
-  { id: 'short_film', name: '短视频口播', icon: '🎬', desc: '口播短视频' },
-  { id: 'film_scene', name: '影视短片', icon: '🎥', desc: '电影级场景' },
-  { id: 'landscape', name: '风景大片', icon: '🌄', desc: '自然风光' },
-];
-
 const videoRatios = [
   ['Auto', '16:9', '4:3', '1:1', '3:4'],
   ['9:16', '21:9'],
@@ -60,18 +52,11 @@ export default function CreateVideoPage() {
   const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
-  const [mode, setMode] = useState<'text2video' | 'img2video' | 'extend' | 'enhance'>('text2video');
   const [duration, setDuration] = useState(5);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [videoRatio, setVideoRatio] = useState<string>('16:9');
   const [videoQuality, setVideoQuality] = useState<'480P' | '720P' | '1080P'>('720P');
   const [generateAudio, setGenerateAudio] = useState(true);
-
-  // Multi-image upload
-  const [refImages, setRefImages] = useState<{ file: File; preview: string }[]>([]);
-  const [imgDragOver, setImgDragOver] = useState(false);
-  const imgFileInputRef = useRef<HTMLInputElement>(null);
-  const MAX_REF_IMAGES = 12;
 
   // Audio upload (MP3 only)
   const [audioFile, setAudioFile] = useState<{ file: File; preview: string } | null>(null);
@@ -221,52 +206,6 @@ export default function CreateVideoPage() {
       router.push(pendingNavigation);
       setPendingNavigation(null);
     }
-  };
-
-  // Multi-image upload handlers
-  const addRefImages = (files: FileList | File[]) => {
-    const fileArr = Array.from(files).filter(f => f.type.startsWith('image/'));
-    const remaining = MAX_REF_IMAGES - refImages.length;
-    if (remaining <= 0) {
-      alert(`最多上传 ${MAX_REF_IMAGES} 张素材图`);
-      return;
-    }
-    const toAdd = fileArr.slice(0, remaining);
-    if (fileArr.length > remaining) {
-      alert(`已超出数量限制，仅添加前 ${remaining} 张`);
-    }
-    const newItems = toAdd.map(file => ({
-      file,
-      preview: URL.createObjectURL(file),
-    }));
-    setRefImages(prev => [...prev, ...newItems]);
-  };
-
-  const removeRefImage = (index: number) => {
-    setRefImages(prev => {
-      const item = prev[index];
-      URL.revokeObjectURL(item.preview);
-      return prev.filter((_, i) => i !== index);
-    });
-  };
-
-  const handleImgDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setImgDragOver(true);
-  };
-
-  const handleImgDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setImgDragOver(false);
-  };
-
-  const handleImgDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setImgDragOver(false);
-    if (e.dataTransfer.files.length > 0) addRefImages(e.dataTransfer.files);
   };
 
   // Audio upload handlers
@@ -527,15 +466,6 @@ export default function CreateVideoPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            <Tabs value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
-              <TabsList className="grid grid-cols-4 w-full">
-                <TabsTrigger value="text2video"><Film className="w-4 h-4 mr-1" />文生视频</TabsTrigger>
-                <TabsTrigger value="img2video"><Clapperboard className="w-4 h-4 mr-1" />图生视频</TabsTrigger>
-                <TabsTrigger value="extend"><Play className="w-4 h-4 mr-1" />视频延长</TabsTrigger>
-                <TabsTrigger value="enhance"><ZoomIn className="w-4 h-4 mr-1" />画质增强</TabsTrigger>
-              </TabsList>
-            </Tabs>
-
             <Card className="border-border/50">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">视频描述</CardTitle>
@@ -549,81 +479,13 @@ export default function CreateVideoPage() {
                   rows={4}
                 />
 
-                {/* Image Upload for img2video / extend / enhance modes */}
-                {(mode === 'img2video' || mode === 'extend' || mode === 'enhance') && (
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">上传素材图</span>
-                      <span className="text-xs text-muted-foreground">{refImages.length}/{MAX_REF_IMAGES}</span>
-                    </div>
-                    {/* Drag & Drop Zone */}
-                    <div
-                      className={`border-2 border-dashed rounded-xl p-5 text-center transition-all cursor-pointer ${
-                        imgDragOver
-                          ? 'border-cyan-500 bg-cyan-500/10'
-                          : 'border-border/50 hover:border-cyan-500/40 hover:bg-muted/30'
-                      }`}
-                      onDragOver={handleImgDragOver}
-                      onDragLeave={handleImgDragLeave}
-                      onDrop={handleImgDrop}
-                      onClick={() => imgFileInputRef.current?.click()}
-                    >
-                      <Plus className="w-6 h-6 mx-auto text-muted-foreground mb-1.5" />
-                      <p className="text-sm text-muted-foreground">
-                        点击选择或拖拽图片到此处
-                      </p>
-                      <p className="text-xs text-muted-foreground/60 mt-1">
-                        支持 JPG/PNG/WebP，单次最多 {MAX_REF_IMAGES} 张
-                      </p>
-                      <input
-                        ref={imgFileInputRef}
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        className="hidden"
-                        onChange={(e) => {
-                          if (e.target.files) addRefImages(e.target.files);
-                          e.target.value = '';
-                        }}
-                      />
-                    </div>
-                    {/* Thumbnail Grid */}
-                    {refImages.length > 0 && (
-                      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
-                        {refImages.map((img, idx) => (
-                          <div
-                            key={idx}
-                            className="relative group aspect-square rounded-lg overflow-hidden border border-border/50"
-                          >
-                            <img
-                              src={img.preview}
-                              alt={`素材图 ${idx + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                            <button
-                              className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500"
-                              onClick={(e) => { e.stopPropagation(); removeRefImage(idx); }}
-                            >
-                              <X className="w-3 h-3" />
-                            </button>
-                            <div className="absolute bottom-1 left-1 text-[10px] bg-black/60 text-white px-1 rounded">
-                              {idx + 1}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {/* Audio Upload Module */}
-                {(mode === 'img2video' || mode === 'text2video') && (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Music className="w-4 h-4 text-cyan-400" />
-                      <span className="text-sm font-medium">音频上传</span>
-                      <span className="text-xs text-muted-foreground">（可选）</span>
-                    </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Music className="w-4 h-4 text-cyan-400" />
+                    <span className="text-sm font-medium">音频上传</span>
+                    <span className="text-xs text-muted-foreground">（可选）</span>
+                  </div>
                     {audioFile ? (
                       <div className="flex items-center gap-3 p-3 rounded-lg border border-border/50 bg-muted/30">
                         <button
@@ -675,7 +537,6 @@ export default function CreateVideoPage() {
                       </div>
                     )}
                   </div>
-                )}
 
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">

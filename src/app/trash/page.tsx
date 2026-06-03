@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
-import { Trash2, RotateCcw, Image, Video, Loader2, CheckSquare, Square, XCircle } from 'lucide-react';
+import { Trash2, RotateCcw, Video, Loader2, CheckSquare, Square, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {

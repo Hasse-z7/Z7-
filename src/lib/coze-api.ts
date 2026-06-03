@@ -12,8 +12,6 @@ import type { NextRequest } from 'next/server';
 const config = new Config();
 
 // Video SDK types (mirrored from coze-coding-dev-sdk/dist/types/video/models)
-type VideoResolution = '480p' | '720p' | '1080p';
-type VideoRatio = '16:9' | '9:16' | '1:1' | '4:3' | '3:4' | '21:9' | 'adaptive';
 interface VideoImageURL { url: string }
 interface VideoImageURLContent { type: 'image_url'; image_url: VideoImageURL; role?: 'first_frame' | 'last_frame' | 'reference_image' }
 interface VideoTextContent { type: 'text'; text: string }

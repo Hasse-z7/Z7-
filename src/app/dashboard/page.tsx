@@ -1,12 +1,13 @@
 'use client';
 
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  ImageIcon, Video, Music, Sparkles, Zap, Crown,
-  ArrowRight, Wand2, Film, Mic, FolderOpen, History, Trash2
+  Sparkles, Zap, Crown,
+  ArrowRight, Wand2, Film, Mic, FolderOpen, History, Trash2, Plus, Folder
 } from 'lucide-react';
 
 const features = [
@@ -36,18 +37,56 @@ const features = [
   },
 ];
 
-const hotTemplates = [
-  { name: '超写实人像', category: 'image', style: '写实', gradient: 'from-violet-500/20 to-purple-500/20' },
-  { name: '二次元少女', category: 'image', style: '二次元', gradient: 'from-pink-500/20 to-rose-500/20' },
-  { name: '国风水墨', category: 'image', style: '国风', gradient: 'from-emerald-500/20 to-teal-500/20' },
-  { name: '赛博朋克', category: 'image', style: '科技', gradient: 'from-cyan-500/20 to-blue-500/20' },
-  { name: '流行音乐', category: 'music', style: '流行', gradient: 'from-rose-500/20 to-pink-500/20' },
-  { name: '古风音乐', category: 'music', style: '古风', gradient: 'from-amber-500/20 to-orange-500/20' },
-  { name: '风景大片', category: 'video', style: '视频', gradient: 'from-green-500/20 to-emerald-500/20' },
-];
+interface Project {
+  id: string;
+  name: string;
+  created_at: string;
+  image_count: number;
+  video_count: number;
+}
 
 export default function DashboardPage() {
   const { profile } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('sb-access-token');
+      if (!token) return;
+      const res = await fetch('/api/projects', {
+        headers: { 'x-session': token },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setProjects(data.projects || []);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProjects();
+  }, [fetchProjects]);
+
+  const handleCreateProject = async () => {
+    try {
+      const token = localStorage.getItem('sb-access-token');
+      if (!token) return;
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-session': token },
+        body: JSON.stringify({ name: `${today}项目`, auto_default: true }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        window.location.href = `/history?project_id=${data.project?.id}`;
+      }
+    } catch {
+      // ignore
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -120,37 +159,60 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Hot Templates */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-2xl font-bold">热门模板</h2>
-            <p className="text-muted-foreground mt-1">精选AI创作模板，一键生成</p>
+      {/* My Projects */}
+      {profile && (
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h2 className="text-2xl font-bold">我的项目</h2>
+              <p className="text-muted-foreground mt-1">管理创作项目</p>
+            </div>
+            {projects.length > 7 && (
+              <Link href="/projects">
+                <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-cyan-300">
+                  更多 <ArrowRight className="w-4 h-4 ml-1" />
+                </Button>
+              </Link>
+            )}
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {hotTemplates.map((tpl, idx) => (
-            <Link
-              key={idx}
-              href={`/create/${tpl.category}`}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+            {/* New Project Button */}
+            <button
+              onClick={handleCreateProject}
+              className="group flex flex-col items-center justify-center h-36 rounded-xl border-2 border-dashed border-cyan-500/30 bg-cyan-500/5 hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all duration-300"
             >
-              <Card className="group overflow-hidden border-border/50 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer">
-                <div className={`h-28 bg-gradient-to-br ${tpl.gradient} flex items-center justify-center`}>
-                  {tpl.category === 'image' && <ImageIcon className="w-10 h-10 text-foreground/30" />}
-                  {tpl.category === 'video' && <Video className="w-10 h-10 text-foreground/30" />}
-                  {tpl.category === 'music' && <Music className="w-10 h-10 text-foreground/30" />}
+              <div className="w-12 h-12 rounded-full bg-cyan-500/10 group-hover:bg-cyan-500/20 flex items-center justify-center mb-2 transition-colors">
+                <Plus className="w-6 h-6 text-cyan-400" />
+              </div>
+              <span className="text-sm font-medium text-cyan-400">新建项目</span>
+            </button>
 
-                </div>
-                <CardContent className="p-3">
-                  <p className="font-medium text-sm">{tpl.name}</p>
-                  <p className="text-xs text-muted-foreground">{tpl.style}</p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
-      </section>
+            {/* Project Cards */}
+            {projects.slice(0, 7).map((project) => (
+              <Link key={project.id} href={`/history?project_id=${project.id}`}>
+                <Card className="group overflow-hidden border-border/50 bg-card/50 hover:bg-card/80 backdrop-blur-sm transition-all duration-300 hover:-translate-y-1 cursor-pointer h-36">
+                  <CardContent className="p-4 h-full flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Folder className="w-4 h-4 text-cyan-400" />
+                        <p className="font-medium text-sm truncate">{project.name}</p>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {new Date(project.created_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                      {project.image_count > 0 && <span>{project.image_count} 图片</span>}
+                      {project.video_count > 0 && <span>{project.video_count} 视频</span>}
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Quick Links */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
