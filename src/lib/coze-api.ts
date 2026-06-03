@@ -8,10 +8,48 @@ import {
 } from 'coze-coding-dev-sdk';
 import type { NextRequest } from 'next/server';
 
-// Shared config - use provided API key or auto-load from env vars
-const config = new Config({
-  apiKey: process.env.COZE_API_KEY || undefined,
-});
+/**
+ * Config factory for IMAGE generation.
+ * Uses user's COZE_API_KEY (sk-xxx) with api.coze.cn if available.
+ * Falls back to platform defaults.
+ */
+function getImageConfig(): Config {
+  const userApiKey = process.env.COZE_API_KEY;
+  if (userApiKey) {
+    return new Config({
+      apiKey: userApiKey,
+      baseUrl: 'https://api.coze.cn',
+      modelBaseUrl: 'https://api.coze.cn/api/v3',
+    });
+  }
+  return new Config();
+}
+
+/**
+ * Config factory for VIDEO generation.
+ * ALWAYS uses platform's COZE_WORKLOAD_IDENTITY_API_KEY + integration.coze.cn,
+ * because user's sk-xxx key does not have video generation permissions.
+ */
+function getVideoConfig(): Config {
+  return new Config();
+}
+
+/**
+ * Config factory for TTS/LLM.
+ * Uses user's COZE_API_KEY with api.coze.cn if available.
+ * Falls back to platform defaults.
+ */
+function getTTSConfig(): Config {
+  const userApiKey = process.env.COZE_API_KEY;
+  if (userApiKey) {
+    return new Config({
+      apiKey: userApiKey,
+      baseUrl: 'https://api.coze.cn',
+      modelBaseUrl: 'https://api.coze.cn/api/v3',
+    });
+  }
+  return new Config();
+}
 
 // Video SDK types (mirrored from coze-coding-dev-sdk/dist/types/video/models)
 interface VideoImageURL { url: string }
@@ -27,7 +65,7 @@ export async function generateImage(
   imageUrls?: string[],
   modelEndpoint?: string,
 ): Promise<string[]> {
-  const client = new ImageGenerationClient(config);
+  const client = new ImageGenerationClient(getImageConfig());
 
   const request: Record<string, unknown> = {
     prompt,
@@ -35,7 +73,6 @@ export async function generateImage(
     watermark: false,
   };
 
-  // 使用前端传来的模型Endpoint，覆盖默认值
   if (modelEndpoint) {
     request.model = modelEndpoint;
   }
@@ -57,7 +94,7 @@ export async function generateImage(
 // ==================== AI Video Generation ====================
 
 export async function generateVideo(
-  request: NextRequest,
+  requestOrOptions: NextRequest | null,
   options: {
     prompt?: string;
     imageUrl?: string;
@@ -68,10 +105,24 @@ export async function generateVideo(
     modelEndpoint?: string;
   },
 ): Promise<{ videoUrl: string; lastFrameUrl?: string }> {
-  const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
-  const client = new VideoGenerationClient(config, customHeaders as Record<string, string>);
+  const config = getVideoConfig();
+  let customHeaders: Record<string, string> = {};
 
-  // Build content array - must match SDK Content type exactly
+  // Only extract forward headers from a real NextRequest
+  if (requestOrOptions && requestOrOptions instanceof Request) {
+    try {
+      const extracted = HeaderUtils.extractForwardHeaders(requestOrOptions.headers);
+      if (extracted && typeof extracted === 'object') {
+        customHeaders = extracted as Record<string, string>;
+      }
+    } catch {
+      // Ignore header extraction errors
+    }
+  }
+
+  const client = new VideoGenerationClient(config, customHeaders);
+
+  // Build content array
   const content: VideoContent[] = [];
 
   if (options.prompt) {
@@ -81,10 +132,11 @@ export async function generateVideo(
     content.push({
       type: 'image_url',
       image_url: { url: options.imageUrl },
+      role: 'first_frame',
     });
   }
 
-  // Build video generation options matching SDK signature exactly
+  // Build video generation options
   const videoOptions: Record<string, unknown> = {
     model: options.modelEndpoint || 'doubao-seedance-1-5-pro-251215',
     duration: options.duration || 5,
@@ -101,6 +153,8 @@ export async function generateVideo(
       videoOptions.ratio = options.ratio;
     }
   }
+
+  console.info(`[CozeAPI] 视频生成请求: model=${videoOptions.model}, duration=${videoOptions.duration}, hasImage=${!!options.imageUrl}, hasPrompt=${!!options.prompt}, baseUrl=${config.baseUrl}`);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const response = await client.videoGeneration(content as any, videoOptions as any);
@@ -119,7 +173,7 @@ export async function generateVideo(
 // ==================== AI Music Generation ====================
 
 export async function generateMusic(prompt: string, style?: string): Promise<string> {
-  const client = new LLMClient(config);
+  const client = new LLMClient(getTTSConfig());
 
   const systemPrompt = `你是一位专业的音乐创作AI。根据用户描述生成音乐创作方案，包含曲风、节奏、乐器编配等。${
     style ? `用户指定曲风：${style}。` : ''
@@ -136,7 +190,6 @@ export async function generateMusic(prompt: string, style?: string): Promise<str
 
   const response = await client.invoke(messages, llmConfig);
 
-  // LLMResponse - extract text content
   const text = typeof response === 'string'
     ? response
     : (response as unknown as Record<string, unknown>).content as string || JSON.stringify(response);
@@ -151,6 +204,7 @@ export async function generateTTS(
   text: string,
   voiceType?: string,
 ): Promise<string> {
+  const config = getTTSConfig();
   const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
   const client = new TTSClient(config, customHeaders as Record<string, string>);
 

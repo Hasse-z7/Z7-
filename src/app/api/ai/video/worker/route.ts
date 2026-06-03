@@ -15,7 +15,7 @@
  *   - 前端轮询 status 时发现 queued 任务自动触发
  */
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { generateVideo } from '@/lib/coze-api';
 import { refundCredits, recordTransaction } from '@/lib/credits-helpers';
@@ -24,7 +24,7 @@ import type { DeductionResult } from '@/lib/credits-helpers';
 // 防止并发处理同一任务
 const processingTasks = new Set<string>();
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = await request.json();
     const taskId = body.task_id as string | undefined;
@@ -110,8 +110,8 @@ async function processTask(taskId: string): Promise<void> {
     // ========== 3. 通过SDK调用视频生成 ==========
     try {
       const result = await generateVideo(
-        // 构造一个最小化的NextRequest用于HeaderUtils
-        new NextRequest(new URL('http://localhost:5000/api/ai/video/worker')),
+        // 不再传递假 NextRequest，避免 HeaderUtils 提取干扰头
+        null,
         {
           prompt: task.prompt || undefined,
           imageUrl: primaryImageUrl,
@@ -159,6 +159,22 @@ async function processTask(taskId: string): Promise<void> {
     } catch (genError: unknown) {
       const errMsg = genError instanceof Error ? genError.message : '视频生成失败';
       const isTimeout = errMsg.includes('超时') || errMsg.includes('timeout') || errMsg.includes('Timeout');
+      const is403 = errMsg.includes('403');
+
+      // 详细错误日志
+      console.error(`[VideoWorker] 视频生成失败 ${taskId.slice(0, 8)}:`, {
+        error: errMsg,
+        model: task.model_endpoint,
+        hasPrompt: !!task.prompt,
+        hasImage: !!(task.reference_images && task.reference_images.length > 0),
+        isTimeout,
+        is403,
+        stack: genError instanceof Error ? genError.stack?.slice(0, 300) : undefined,
+      });
+
+      if (is403) {
+        console.error(`[VideoWorker] 403错误 — 可能原因: API KEY 无权限/已过期，或图片URL不可访问`);
+      }
 
       // 记录方舟失败日志
       await logArkUsage(supabase, {
