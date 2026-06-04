@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, endpoint_id, category, description, sort_order, platform } = body;
+    const { name, endpoint_id, category, description, sort_order, platform, is_free } = body;
 
     if (!name || !endpoint_id || !category) {
       return NextResponse.json({ error: '模型名称、接入点ID、类型为必填项' }, { status: 400 });
@@ -92,6 +92,7 @@ export async function POST(request: NextRequest) {
         sort_order: sort_order || 0,
         is_active: true,
         platform: platform || 'coze',
+        is_free: is_free ?? false,
       })
       .select()
       .maybeSingle();
@@ -147,6 +148,7 @@ export async function PUT(request: NextRequest) {
     if (body.sort_order !== undefined) updateFields.sort_order = body.sort_order;
     if (body.is_active !== undefined) updateFields.is_active = body.is_active;
     if (body.platform !== undefined) updateFields.platform = body.platform;
+    if (body.is_free !== undefined) updateFields.is_free = body.is_free;
 
     const supabase = getAdminClient();
     const { data, error } = await supabase

@@ -24,7 +24,7 @@ async function resolveProject(supabase: import('@supabase/supabase-js').Supabase
 }
 
 /** 获取模型接入点ID：从前端传来的model_id查询数据库，无效则报错 */
-async function resolveModelEndpoint(modelId: string | undefined, category: string): Promise<{ endpointId: string; modelName: string }> {
+async function resolveModelEndpoint(modelId: string | undefined, category: string): Promise<{ endpointId: string; modelName: string; isFree: boolean }> {
   // 未传model_id，返回错误
   if (!modelId) {
     throw new Error('请选择有效的生成模型');
@@ -38,27 +38,27 @@ async function resolveModelEndpoint(modelId: string | undefined, category: strin
   // 先按 id (UUID) 查找
   const { data: byId } = await supabase
     .from('ai_models')
-    .select('endpoint_id, name, category, is_active')
+    .select('endpoint_id, name, category, is_active, is_free')
     .eq('id', modelId)
     .maybeSingle();
 
   if (byId) {
     if (!byId.is_active) throw new Error('该模型已停用，请选择其他模型');
     if (byId.category !== category) throw new Error('该模型不适用于当前功能');
-    return { endpointId: byId.endpoint_id, modelName: byId.name };
+    return { endpointId: byId.endpoint_id, modelName: byId.name, isFree: byId.is_free === true };
   }
 
   // 再按 endpoint_id 精确查找
   const { data: byEndpoint } = await supabase
     .from('ai_models')
-    .select('endpoint_id, name, category, is_active')
+    .select('endpoint_id, name, category, is_active, is_free')
     .eq('endpoint_id', modelId)
     .maybeSingle();
 
   if (byEndpoint) {
     if (!byEndpoint.is_active) throw new Error('该模型已停用，请选择其他模型');
     if (byEndpoint.category !== category) throw new Error('该模型不适用于当前功能');
-    return { endpointId: byEndpoint.endpoint_id, modelName: byEndpoint.name };
+    return { endpointId: byEndpoint.endpoint_id, modelName: byEndpoint.name, isFree: byEndpoint.is_free === true };
   }
 
   throw new Error('请选择有效的生成模型');
@@ -104,10 +104,12 @@ export async function POST(request: NextRequest) {
     // ========== 2.5 校验模型ID ==========
     let modelEndpoint: string;
     let modelName: string;
+    let isFreeModel: boolean;
     try {
       const resolved = await resolveModelEndpoint(model_id, 'video');
       modelEndpoint = resolved.endpointId;
       modelName = resolved.modelName;
+      isFreeModel = resolved.isFree;
     } catch (modelError: unknown) {
       const msg = modelError instanceof Error ? modelError.message : '请选择有效的生成模型';
       return NextResponse.json({ error: msg }, { status: 400 });
@@ -118,18 +120,21 @@ export async function POST(request: NextRequest) {
     // ========== 2.8 确定项目（未选项目则project_id为null） ==========
     const resolvedProjectId = await resolveProject(supabase, authResult.user.id, project_id);
 
-    // ========== 3. 计算算力消耗 ==========
+    // ========== 3. 计算算力消耗（免费模型不扣算力） ==========
     const videoDuration = duration || 5;
-    const creditsCost = CREDITS_PER_SECOND * videoDuration;
+    const creditsCost = isFreeModel ? 0 : CREDITS_PER_SECOND * videoDuration;
 
-    // ========== 4. 预扣算力 ==========
-    const deduction = await deductCredits(supabase, authResult.user.id, creditsCost);
+    // ========== 4. 预扣算力（免费模型跳过） ==========
+    let deduction: Awaited<ReturnType<typeof deductCredits>> | null = null;
+    if (creditsCost > 0) {
+      deduction = await deductCredits(supabase, authResult.user.id, creditsCost);
 
-    if (!deduction.success) {
-      return NextResponse.json(
-        { error: (deduction as { error: string }).error, redirect: '/recharge' },
-        { status: 402 },
-      );
+      if (!deduction.success) {
+        return NextResponse.json(
+          { error: (deduction as { error: string }).error, redirect: '/recharge' },
+          { status: 402 },
+        );
+      }
     }
 
     // ========== 5. 创建异步任务记录 ==========
@@ -156,8 +161,8 @@ export async function POST(request: NextRequest) {
         audio_url: audio_url || null,
         audio_enabled: audio !== false,
         credits_cost: creditsCost,
-        free_deducted: deduction.freeDeducted,
-        paid_deducted: deduction.paidDeducted,
+        free_deducted: deduction?.freeDeducted ?? 0,
+        paid_deducted: deduction?.paidDeducted ?? 0,
         model_endpoint: modelEndpoint,
         project_id: resolvedProjectId,
       })
@@ -166,27 +171,31 @@ export async function POST(request: NextRequest) {
 
     if (taskError || !task) {
       // 创建任务失败，退还预扣算力
-      const { refundCredits } = await import('@/lib/credits-helpers');
-      await refundCredits(supabase, authResult.user.id, deduction);
+      if (deduction) {
+        const { refundCredits } = await import('@/lib/credits-helpers');
+        await refundCredits(supabase, authResult.user.id, deduction);
+      }
 
       console.error('[VideoAPI] 创建任务失败:', taskError);
       return NextResponse.json({ error: '创建任务失败，请重试' }, { status: 500 });
     }
 
-    // ========== 6. 记录预扣流水 ==========
-    const creditsType = deduction.freeDeducted > 0 && deduction.paidDeducted > 0
-      ? 'mixed'
-      : deduction.freeDeducted > 0 ? 'free' : 'paid';
+    // ========== 6. 记录预扣流水（免费模型跳过） ==========
+    if (deduction) {
+      const creditsType = deduction.freeDeducted > 0 && deduction.paidDeducted > 0
+        ? 'mixed'
+        : deduction.freeDeducted > 0 ? 'free' : 'paid';
 
-    await recordTransaction(supabase, {
-      userId: authResult.user.id,
-      amount: -creditsCost,
-      balanceAfter: deduction.newTotalCredits,
-      type: 'consumption',
-      description: `AI视频预扣(${videoDuration}秒) [${modelName}] - 任务 ${task.id.slice(0, 8)}`,
-      creditsType,
-      relatedId: task.id,
-    });
+      await recordTransaction(supabase, {
+        userId: authResult.user.id,
+        amount: -creditsCost,
+        balanceAfter: deduction.newTotalCredits,
+        type: 'consumption',
+        description: `AI视频预扣(${videoDuration}秒) [${modelName}] - 任务 ${task.id.slice(0, 8)}`,
+        creditsType,
+        relatedId: task.id,
+      });
+    }
 
     // ========== 7. 触发 Worker 处理（fire-and-forget） ==========
     const baseUrl = process.env.DEPLOY_RUN_PORT
@@ -202,11 +211,16 @@ export async function POST(request: NextRequest) {
     });
 
     // ========== 8. 立即返回任务ID ==========
+    // 获取用户当前总算力
+    const { data: currentProfile } = await supabase.from('profiles').select('free_credits, paid_credits').eq('user_id', authResult.user.id).maybeSingle();
+    const remainingCredits = (currentProfile?.free_credits || 0) + (currentProfile?.paid_credits || 0);
+
     return NextResponse.json({
       task_id: task.id,
       status: 'queued',
       credits_cost: creditsCost,
-      remaining_credits: deduction.newTotalCredits,
+      remaining_credits: remainingCredits,
+      is_free: isFreeModel,
       project_id: resolvedProjectId,
     });
 

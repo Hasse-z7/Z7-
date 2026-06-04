@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     const adminClient = getSupabaseClient();
     const { data: modelData, error: modelError } = await adminClient
       .from('ai_models')
-      .select('endpoint_id, name, platform')
+      .select('endpoint_id, name, platform, is_free')
       .eq('endpoint_id', model_endpoint)
       .eq('category', 'image')
       .eq('is_active', true)
@@ -47,21 +47,25 @@ export async function POST(request: NextRequest) {
     }
 
     const modelPlatform = modelData.platform || 'coze';
+    const isFreeModel = modelData.is_free === true;
 
     const { supabase } = authResult;
 
-    // 计算算力消耗：批量生成按实际张数扣点
+    // 计算算力消耗：免费模型不扣算力，收费模型按实际张数扣点
     const count = imageCount || 1;
-    const creditsCost = CREDITS_PER_IMAGE * count;
+    const creditsCost = isFreeModel ? 0 : CREDITS_PER_IMAGE * count;
 
-    // ========== 1. 先扣算力，再调用AI模型 ==========
-    const deduction = await deductCredits(supabase, authResult.user.id, creditsCost);
+    // ========== 1. 扣算力（免费模型跳过） ==========
+    let deduction: Awaited<ReturnType<typeof deductCredits>> | null = null;
+    if (creditsCost > 0) {
+      deduction = await deductCredits(supabase, authResult.user.id, creditsCost);
 
-    if (!deduction.success) {
-      return NextResponse.json(
-        { error: deduction.error, redirect: deduction.redirect },
-        { status: 402 },
-      );
+      if (!deduction.success) {
+        return NextResponse.json(
+          { error: deduction.error, redirect: deduction.redirect },
+          { status: 402 },
+        );
+      }
     }
 
     // ========== 2. 调用AI模型生成图片 ==========
@@ -82,36 +86,38 @@ export async function POST(request: NextRequest) {
       }
     } catch (aiError: unknown) {
       // AI调用失败，退还已扣除的算力
-      await refundCredits(supabase, authResult.user.id, deduction);
-
-      // 记录退还流水
-      await recordTransaction(supabase, {
-        userId: authResult.user.id,
-        amount: creditsCost,
-        balanceAfter: deduction.newTotalCredits,
-        type: 'refund',
-        description: `AI生图失败退还(${count}张) - 模型:${model_endpoint}`,
-        creditsType: 'refund',
-      });
+      if (deduction) {
+        await refundCredits(supabase, authResult.user.id, deduction);
+        await recordTransaction(supabase, {
+          userId: authResult.user.id,
+          amount: creditsCost,
+          balanceAfter: deduction.newTotalCredits,
+          type: 'refund',
+          description: `AI生图失败退还(${count}张) - 模型:${model_endpoint}`,
+          creditsType: 'refund',
+        });
+      }
 
       const message = aiError instanceof Error ? aiError.message : '生成失败';
       console.error('AI image generation error:', message);
       return NextResponse.json({ error: message }, { status: 500 });
     }
 
-    // ========== 3. 记录消耗流水 ==========
-    const creditsType = deduction.freeDeducted > 0 && deduction.paidDeducted > 0
-      ? 'mixed'
-      : deduction.freeDeducted > 0 ? 'free' : 'paid';
+    // ========== 3. 记录消耗流水（免费模型记录0消耗） ==========
+    if (deduction) {
+      const creditsType = deduction.freeDeducted > 0 && deduction.paidDeducted > 0
+        ? 'mixed'
+        : deduction.freeDeducted > 0 ? 'free' : 'paid';
 
-    await recordTransaction(supabase, {
-      userId: authResult.user.id,
-      amount: -creditsCost,
-      balanceAfter: deduction.newTotalCredits,
-      type: 'consumption',
-      description: `AI生图(${count}张) - ${mode || 'text2img'} - 模型:${model_endpoint}`,
-      creditsType,
-    });
+      await recordTransaction(supabase, {
+        userId: authResult.user.id,
+        amount: -creditsCost,
+        balanceAfter: deduction.newTotalCredits,
+        type: 'consumption',
+        description: `AI生图(${count}张) - ${mode || 'text2img'} - 模型:${model_endpoint}`,
+        creditsType,
+      });
+    }
 
     // ========== 4. 确定项目（未选项目则project_id为null） ==========
     const resolvedProjectId = await resolveProject(supabase, authResult.user.id, project_id);
@@ -130,10 +136,15 @@ export async function POST(request: NextRequest) {
       workId = insertedWork?.id || null;
     }
 
+    // 获取用户当前总算力
+    const { data: currentProfile } = await supabase.from('profiles').select('free_credits, paid_credits').eq('user_id', authResult.user.id).maybeSingle();
+    const remainingCredits = (currentProfile?.free_credits || 0) + (currentProfile?.paid_credits || 0);
+
     return NextResponse.json({
       image_urls: generatedUrls,
       credits_cost: creditsCost,
-      remaining_credits: deduction.newTotalCredits,
+      remaining_credits: remainingCredits,
+      is_free: isFreeModel,
       project_id: resolvedProjectId,
       work_id: workId,
     });

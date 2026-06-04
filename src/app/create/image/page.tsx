@@ -30,6 +30,8 @@ interface AIModel {
   endpoint_id: string;
   category: string;
   description: string;
+  platform?: string;
+  is_free?: boolean;
 }
 
 interface ImageTask {
@@ -629,17 +631,27 @@ export default function CreateImagePage() {
                     )}
                     {models.map((m) => (
                       <option key={m.endpoint_id} value={m.endpoint_id}>
-                        {m.name}
+                        {m.name}{m.is_free ? ' [免费]' : ` [${2}算力/张]`}
                       </option>
                     ))}
                   </select>
                   <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 </div>
-                {selectedModelEndpoint && (
-                  <p className="mt-1.5 text-xs text-muted-foreground truncate">
-                    {selectedModelEndpoint}
-                  </p>
-                )}
+                {selectedModelEndpoint && (() => {
+                  const selectedModel = models.find(m => m.endpoint_id === selectedModelEndpoint);
+                  return (
+                    <div className="mt-1.5 flex items-center gap-2">
+                      <p className="text-xs text-muted-foreground truncate">
+                        {selectedModel?.description || selectedModelEndpoint}
+                      </p>
+                      {selectedModel?.is_free ? (
+                        <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0">免费</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0">2算力/张</Badge>
+                      )}
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
 
