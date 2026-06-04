@@ -2,16 +2,17 @@
  * dmxapi.cn OpenAI-compatible client for image generation.
  * Supports models like GPT Image 2, DALL-E 3, etc.
  * Base URL: https://www.dmxapi.cn/v1
+ *
+ * Multi-KEY rotation: Set DMXAPI_API_KEYS=key1,key2,key3 for higher throughput.
+ * Falls back to DMXAPI_API_KEY if DMXAPI_API_KEYS is not set.
  */
+
+import { getNextDmxapiKey, markDmxapiKeyFailed, markDmxapiKeySuccess } from './rate-limiter';
 
 const DMXAPI_BASE_URL = 'https://www.dmxapi.cn/v1';
 
 function getApiKey(): string {
-  const key = process.env.DMXAPI_API_KEY || '';
-  if (!key) {
-    throw new Error('DMXAPI_API_KEY 环境变量未配置');
-  }
-  return key;
+  return getNextDmxapiKey();
 }
 
 interface ImageGenerationResult {
@@ -58,33 +59,40 @@ export async function generateImageViaDmxapi(params: {
     requestBody.quality = params.quality;
   }
 
+  let usedApiKey = '';
+
   console.info(`[DmxAPI] 图片生成请求: model=${params.model}, size=${size}, prompt=${params.prompt.substring(0, 50)}`);
 
-  const response = await fetch(`${DMXAPI_BASE_URL}/images/generations`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
+  try {
+    usedApiKey = getApiKey();
+    const response = await fetch(`${DMXAPI_BASE_URL}/images/generations`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${usedApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(requestBody),
+    });
 
-  if (!response.ok) {
-    let errorMessage = `dmxapi.cn 请求失败 (HTTP ${response.status})`;
-    try {
-      const errorBody = await response.json() as { error?: { message?: string; code?: string } };
-      if (errorBody.error?.message) {
-        errorMessage = errorBody.error.message;
+    if (!response.ok) {
+      let errorMessage = `dmxapi.cn 请求失败 (HTTP ${response.status})`;
+      try {
+        const errorBody = await response.json() as { error?: { message?: string; code?: string } };
+        if (errorBody.error?.message) {
+          errorMessage = errorBody.error.message;
+        }
+        if (errorBody.error?.code === 'insufficient_user_quota') {
+          errorMessage = 'dmxapi.cn 账户额度不足，请联系管理员充值';
+        }
+      } catch {
+        // Use default error message
       }
-      if (errorBody.error?.code === 'insufficient_user_quota') {
-        errorMessage = 'dmxapi.cn 账户额度不足，请联系管理员充值';
-      }
-    } catch {
-      // Use default error message
+      markDmxapiKeyFailed(usedApiKey);
+      console.error(`[DmxAPI] 图片生成失败: ${errorMessage}`);
+      throw new Error(errorMessage);
     }
-    console.error(`[DmxAPI] 图片生成失败: ${errorMessage}`);
-    throw new Error(errorMessage);
-  }
+
+    markDmxapiKeySuccess(usedApiKey);
 
   const data = await response.json() as {
     data: Array<{
@@ -111,6 +119,10 @@ export async function generateImageViaDmxapi(params: {
   const revisedPrompt = data.data?.[0]?.revised_prompt;
 
   return { urls, revisedPrompt };
+  } catch (error) {
+    if (usedApiKey) markDmxapiKeyFailed(usedApiKey);
+    throw error;
+  }
 }
 
 /**

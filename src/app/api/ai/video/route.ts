@@ -12,9 +12,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
-import { deductCredits, recordTransaction, CREDITS_PER_SECOND } from '@/lib/credits-helpers';
+import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_SECOND } from '@/lib/credits-helpers';
 import { isCircuitBreakerOpen } from '@/lib/ark-config';
 import { createClient } from '@supabase/supabase-js';
+import { acquireAISlot, releaseSlot } from '@/lib/rate-limiter';
 
 /** 验证项目是否属于该用户，不存在则返回null */
 async function resolveProject(supabase: import('@supabase/supabase-js').SupabaseClient, userId: string, projectId?: string): Promise<string | null> {
@@ -149,6 +150,27 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ========== 4.5 获取并发槽位 ==========
+    let slotId: string;
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('vip_level')
+        .eq('user_id', authResult.user.id)
+        .maybeSingle();
+      slotId = await acquireAISlot({
+        userId: authResult.user.id,
+        model: modelEndpoint,
+        isVip: (profileData?.vip_level || 0) > 0,
+      });
+    } catch (rateError: unknown) {
+      const message = rateError instanceof Error ? rateError.message : '系统繁忙';
+      if (deduction) {
+        await refundCredits(supabase, authResult.user.id, deduction);
+      }
+      return NextResponse.json({ error: message }, { status: 429 });
+    }
+
     // ========== 5. 创建异步任务记录 ==========
     const referenceImages: string[] = [];
     if (images && Array.isArray(images)) {
@@ -184,8 +206,8 @@ export async function POST(request: NextRequest) {
 
     if (taskError || !task) {
       // 创建任务失败，退还预扣算力
+      releaseSlot(slotId);
       if (deduction) {
-        const { refundCredits } = await import('@/lib/credits-helpers');
         await refundCredits(supabase, authResult.user.id, deduction);
       }
 
@@ -222,6 +244,9 @@ export async function POST(request: NextRequest) {
     }).catch(err => {
       console.error('[VideoAPI] 触发Worker失败（将在下次轮询时恢复）:', err);
     });
+
+    // ========== 7.5 释放并发槽位（任务已入队） ==========
+    releaseSlot(slotId);
 
     // ========== 8. 立即返回任务ID ==========
     // 获取用户当前总算力

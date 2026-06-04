@@ -5,6 +5,7 @@ import { generateImageViaDmxapi, generateImageViaMj, isDmxapiModel } from '@/lib
 import { HeaderUtils } from 'coze-coding-dev-sdk';
 import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { acquireAISlot, releaseSlot } from '@/lib/rate-limiter';
 
 /** 验证项目是否属于该用户，不存在则返回null */
 async function resolveProject(supabase: ReturnType<typeof getSupabaseClient> extends Promise<infer T> ? T : ReturnType<typeof getSupabaseClient>, userId: string, projectId?: string) {
@@ -78,7 +79,29 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ========== 2. 调用AI模型生成图片 ==========
+    // ========== 2. 获取并发槽位 ==========
+    let slotId: string;
+    try {
+      const { data: profileData } = await supabase
+        .from('profiles')
+        .select('vip_level')
+        .eq('user_id', authResult.user.id)
+        .maybeSingle();
+      slotId = await acquireAISlot({
+        userId: authResult.user.id,
+        model: model_endpoint,
+        isVip: (profileData?.vip_level || 0) > 0,
+      });
+    } catch (rateError: unknown) {
+      const message = rateError instanceof Error ? rateError.message : '系统繁忙';
+      // 退还已扣除的算力
+      if (deduction) {
+        await refundCredits(supabase, authResult.user.id, deduction);
+      }
+      return NextResponse.json({ error: message }, { status: 429 });
+    }
+
+    // ========== 3. 调用AI模型生成图片 ==========
     let generatedUrls: string[];
     try {
       if (model_endpoint.startsWith('mj_')) {
@@ -104,6 +127,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (aiError: unknown) {
       // AI调用失败，退还已扣除的算力
+      releaseSlot(slotId);
       if (deduction) {
         await refundCredits(supabase, authResult.user.id, deduction);
         await recordTransaction(supabase, {
@@ -137,7 +161,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ========== 4. 确定项目（未选项目则project_id为null） ==========
+    // ========== 4. 释放并发槽位 ==========
+    releaseSlot(slotId);
+
+    // ========== 5. 确定项目（未选项目则project_id为null） ==========
     const resolvedProjectId = await resolveProject(supabase, authResult.user.id, project_id);
 
     // ========== 5. 保存作品 ==========
