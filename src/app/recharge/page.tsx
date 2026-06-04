@@ -43,6 +43,7 @@ interface Order {
   package_name: string;
   amount: number;
   credits: number;
+  credits_granted: number;
   payment_method: string;
   status: string;
   created_at: string;
@@ -87,6 +88,7 @@ export default function RechargePage() {
   const [showNoQRAlert, setShowNoQRAlert] = useState(false);
   const [uploadMethod, setUploadMethod] = useState<'wechat' | 'alipay'>('wechat');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [successToast, setSuccessToast] = useState<string | null>(null);
 
   // 账单记录
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -172,10 +174,10 @@ export default function RechargePage() {
       if (data.order) {
         setCurrentOrder(data.order);
       } else {
-        alert(data.error || '创建订单失败');
+        alert(data.error || '创建订单失败，请重试');
       }
     } catch {
-      alert('创建订单失败');
+      alert('网络异常，请稍后重试');
     } finally {
       setLoading(false);
     }
@@ -196,16 +198,17 @@ export default function RechargePage() {
       });
       const data = await res.json();
       if (data.success) {
-        alert(`充值成功！已到账 ${data.credits_added} 算力点`);
+        setSuccessToast(`充值成功！已到账 ${data.credits_added} 算力点`);
         setCurrentOrder(null);
         setSelectedPackage(null);
         refreshProfile();
         fetchTransactions(1);
+        setTimeout(() => setSuccessToast(null), 5000);
       } else {
-        alert(data.error || '核验失败');
+        alert(data.error || '核验失败，请确认已完成付款后重试');
       }
     } catch {
-      alert('核验失败');
+      alert('网络异常，请稍后重试');
     } finally {
       setVerifyLoading(false);
     }
@@ -260,6 +263,19 @@ export default function RechargePage() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Success Toast */}
+      {successToast && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className="flex items-center gap-3 bg-emerald-500/90 backdrop-blur-sm text-white px-6 py-3 rounded-xl shadow-lg shadow-emerald-500/20">
+            <Check className="w-5 h-5 shrink-0" />
+            <span className="font-medium">{successToast}</span>
+            <button onClick={() => setSuccessToast(null)} className="ml-2 hover:bg-white/20 rounded-full p-0.5">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* QR Code Missing Alert */}
       {showNoQRAlert && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -616,15 +632,32 @@ export default function RechargePage() {
                         ) : (
                           <div className="space-y-4">
                             <div className="p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20">
-                              <div className="flex items-center gap-2 text-sm">
+                              <div className="flex items-center gap-2 text-sm mb-3">
                                 <Clock className="w-4 h-4 text-cyan-400" />
-                                <span className="text-cyan-400">等待付款确认</span>
+                                <span className="text-cyan-400 font-medium">请按以下步骤完成充值</span>
                               </div>
-                              <div className="mt-2 space-y-1 text-xs text-muted-foreground">
-                                <p>订单号: <span className="text-foreground font-mono">{currentOrder.order_no}</span></p>
-                                <p>套餐: {currentOrder.package_name}</p>
+                              <div className="space-y-2 text-xs">
+                                <div className="flex items-start gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 font-medium">1</span>
+                                  <span className="text-muted-foreground pt-0.5">扫描左侧{currentOrder.payment_method === 'wechat' ? '微信' : '支付宝'}收款码完成付款</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 font-medium">2</span>
+                                  <span className="text-muted-foreground pt-0.5">付款完成后点击下方「已付款，到账核验」按钮</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 font-medium">3</span>
+                                  <span className="text-muted-foreground pt-0.5">系统核验后算力自动到账</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
+                              <div className="space-y-1 text-xs text-muted-foreground">
+                                <p>订单号: <span className="text-foreground font-mono">{currentOrder.order_no || currentOrder.id}</span></p>
+                                <p>套餐: {currentOrder.package_name || selectedPackage?.name}</p>
                                 <p>金额: <span className="text-cyan-400 font-medium">¥{currentOrder.amount}</span></p>
-                                <p>支付方式: {currentOrder.payment_method === 'wechat' ? '微信' : '支付宝'}</p>
+                                <p>算力: <span className="text-cyan-400 font-medium">{currentOrder.credits || currentOrder.credits_granted || selectedPackage ? (selectedPackage!.credits + (selectedPackage!.bonus_credits || 0)) : '-'}点</span></p>
+                                <p>支付方式: {currentOrder.payment_method === 'wechat' ? '微信支付' : '支付宝'}</p>
                               </div>
                             </div>
                             <Button

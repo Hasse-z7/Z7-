@@ -182,6 +182,7 @@ export async function recordTransaction(
   },
 ): Promise<void> {
   await supabase.from('credits_transactions').insert({
+    id: crypto.randomUUID(),
     user_id: params.userId,
     amount: params.amount,
     balance_after: params.balanceAfter,

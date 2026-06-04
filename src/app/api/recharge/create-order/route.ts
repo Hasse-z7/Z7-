@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
         package_id: pkg.id,
         package_name: pkg.name,
         amount: pkg.price,
-        credits: pkg.credits + (pkg.bonus_credits || 0),
+        credits_granted: pkg.credits + (pkg.bonus_credits || 0),
         payment_method,
         status: 'pending',
       })

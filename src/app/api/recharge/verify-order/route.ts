@@ -45,9 +45,9 @@ export async function POST(request: NextRequest) {
     const { newTotalCredits } = await addPaidCredits(
       supabase,
       user.id,
-      order.credits,
+      order.credits_granted,
       'recharge',
-      `充值${order.credits}算力点 - ${order.package_name}`,
+      `充值${order.credits_granted}算力点 - ${order.package_name || '套餐'}`,
       String(order.id),
     );
 
@@ -77,15 +77,15 @@ export async function POST(request: NextRequest) {
 
         await supabase.from('profiles').update({
           vip_level: vipLevel,
-          vip_expires_at: newExpiry.toISOString(),
+          vip_expire_at: newExpiry.toISOString(),
         }).eq('user_id', user.id);
       }
     }
 
     return NextResponse.json({
       success: true,
-      message: `充值成功！已到账 ${order.credits} 算力点`,
-      credits_added: order.credits,
+      message: `充值成功！已到账 ${order.credits_granted} 算力点`,
+      credits_added: order.credits_granted,
       new_balance: newTotalCredits,
     });
   } catch (err) {
