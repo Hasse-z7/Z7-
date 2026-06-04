@@ -9,6 +9,8 @@ interface UserProfile {
   avatar_url: string;
   phone: string;
   credits: number;
+  free_credits: number;
+  paid_credits: number;
   vip_level: string;
   vip_expire_at: string | null;
   is_admin: boolean;
@@ -25,9 +27,9 @@ interface AuthContextType {
   loading: boolean;
   token: string | null;
   refreshProfile: () => Promise<void>;
-  login: (email: string, password: string) => Promise<void>;
+  loginWithPassword: (phone: string, password: string) => Promise<void>;
   loginWithPhone: (phone: string, code: string) => Promise<void>;
-  register: (email: string, password: string, nickname: string) => Promise<void>;
+  registerWithPhone: (phone: string, password: string, nickname: string) => Promise<void>;
   logout: () => Promise<void>;
   updateCredits: (credits: number) => void;
 }
@@ -38,9 +40,9 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   token: null,
   refreshProfile: async () => {},
-  login: async () => {},
+  loginWithPassword: async () => {},
   loginWithPhone: async () => {},
-  register: async () => {},
+  registerWithPhone: async () => {},
   logout: async () => {},
   updateCredits: () => {},
 });
@@ -87,11 +89,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     refreshProfile().finally(() => setLoading(false));
   }, [refreshProfile]);
 
-  const login = useCallback(async (email: string, password: string) => {
+  // 手机号+密码登录
+  const loginWithPassword = useCallback(async (phone: string, password: string) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ phone, password }),
       credentials: 'include',
     });
     const data = await res.json();
@@ -106,6 +109,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(data.profile);
   }, []);
 
+  // 手机验证码登录
   const loginWithPhone = useCallback(async (phone: string, code: string) => {
     const res = await fetch('/api/auth/verify-otp', {
       method: 'POST',
@@ -125,11 +129,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(data.profile);
   }, []);
 
-  const register = useCallback(async (email: string, password: string, nickname: string) => {
+  // 手机号+密码注册
+  const registerWithPhone = useCallback(async (phone: string, password: string, nickname: string) => {
     const res = await fetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, nickname }),
+      body: JSON.stringify({ phone, password, nickname }),
       credentials: 'include',
     });
     const data = await res.json();
@@ -170,8 +175,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(() => ({
-    user, profile, loading, token, refreshProfile, login, loginWithPhone, register, logout, updateCredits,
-  }), [user, profile, loading, token, refreshProfile, login, loginWithPhone, register, logout, updateCredits]);
+    user, profile, loading, token, refreshProfile, loginWithPassword, loginWithPhone, registerWithPhone, logout, updateCredits,
+  }), [user, profile, loading, token, refreshProfile, loginWithPassword, loginWithPhone, registerWithPhone, logout, updateCredits]);
 
   return (
     <AuthContext.Provider value={value}>

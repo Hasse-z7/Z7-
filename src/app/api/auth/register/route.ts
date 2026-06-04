@@ -2,22 +2,44 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { REGISTER_BONUS } from '@/lib/credits-helpers';
 
+/** 将手机号映射为虚拟邮箱，复用 Supabase 邮箱密码认证 */
+function phoneToVirtualEmail(phone: string): string {
+  return `${phone}@phone.local`;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, nickname } = await request.json();
+    const { phone, password, nickname } = await request.json();
 
-    if (!email || !password) {
-      return NextResponse.json({ error: '邮箱和密码不能为空' }, { status: 400 });
+    if (!phone || !password) {
+      return NextResponse.json({ error: '手机号和密码不能为空' }, { status: 400 });
     }
 
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      return NextResponse.json({ error: '请输入正确的手机号' }, { status: 400 });
+    }
+
+    if (password.length < 6) {
+      return NextResponse.json({ error: '密码至少6位' }, { status: 400 });
+    }
+
+    const virtualEmail = phoneToVirtualEmail(phone);
     const supabase = getSupabaseClient();
     const { data, error } = await supabase.auth.signUp({
-      email,
+      email: virtualEmail,
       password,
-      options: { data: { nickname: nickname || email.split('@')[0] } },
+      options: {
+        data: {
+          nickname: nickname || `用户${phone.slice(-4)}`,
+          phone,
+        },
+      },
     });
 
     if (error) {
+      if (error.message.includes('already registered')) {
+        return NextResponse.json({ error: '该手机号已注册，请直接登录' }, { status: 400 });
+      }
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
@@ -26,7 +48,8 @@ export async function POST(request: NextRequest) {
     if (userId) {
       await supabase.from('profiles').insert({
         user_id: userId,
-        nickname: nickname || email.split('@')[0],
+        nickname: nickname || `用户${phone.slice(-4)}`,
+        phone,
         credits: REGISTER_BONUS,
         free_credits: REGISTER_BONUS,
         paid_credits: 0,
@@ -55,9 +78,9 @@ export async function POST(request: NextRequest) {
       ? await supabase.from('profiles').select('*').eq('user_id', profileUserId).maybeSingle()
       : { data: null };
 
-    // Set session cookies (fallback for same-origin)
+    // Set session cookies
     const response = NextResponse.json({
-      user: { id: data.user?.id || '', email: data.user?.email || '' },
+      user: { id: data.user?.id || '', email: data.user?.email || '', phone },
       profile: profile || null,
       access_token: data.session?.access_token || '',
     });

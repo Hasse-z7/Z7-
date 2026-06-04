@@ -9,10 +9,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, Mail, Lock, User, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Lock, Phone, User, Eye, EyeOff } from 'lucide-react';
 
 export default function RegisterPage() {
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [nickname, setNickname] = useState('');
@@ -21,13 +21,18 @@ export default function RegisterPage() {
   const [agreeTerms, setAgreeTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const { register } = useAuth();
+  const { registerWithPhone } = useAuth();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
+    const cleanPhone = phone.replace(/\s/g, '');
+    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
+      setError('请输入正确的11位手机号');
+      return;
+    }
     if (password !== confirmPassword) {
       setError('两次密码不一致');
       return;
@@ -43,7 +48,7 @@ export default function RegisterPage() {
 
     setLoading(true);
     try {
-      await register(email, password, nickname);
+      await registerWithPhone(cleanPhone, password, nickname);
       router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : '注册失败，请重试');
@@ -64,7 +69,7 @@ export default function RegisterPage() {
           <div className="mx-auto w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center mb-1">
             <Image
               src="https://coze-coding-project.tos.coze.site/gen_project_icon/2026-06-02/7646601479696105506_1780364210.png?sign=4902428488-d0581d8927-0-61e886dc65ac9766f62e1a4e4703e68c8391f1d1b9efaadedad121b7cb27c075"
-              alt="AI多媒体创作网站"
+              alt="燃冬AI"
               width={64}
               height={64}
               className="rounded-2xl"
@@ -91,7 +96,7 @@ export default function RegisterPage() {
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   id="nickname"
-                  placeholder="输入昵称"
+                  placeholder="输入昵称（选填）"
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   className="pl-10"
@@ -100,16 +105,17 @@ export default function RegisterPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">邮箱地址</Label>
+              <Label htmlFor="phone">手机号</Label>
               <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
-                  id="email"
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  id="phone"
+                  type="tel"
+                  placeholder="请输入11位手机号"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
                   className="pl-10"
+                  maxLength={11}
                   required
                 />
               </div>

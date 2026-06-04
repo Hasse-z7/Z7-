@@ -1,26 +1,86 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
+import { Loader2, Phone, Lock, Eye, EyeOff, CheckCircle2, ArrowLeft } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+
+  const [countdown, setCountdown] = useState(0);
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
+
+  const startCountdown = useCallback(() => {
+    setCountdown(60);
+    countdownRef.current = setInterval(() => {
+      setCountdown(prev => {
+        if (prev <= 1) {
+          if (countdownRef.current) clearInterval(countdownRef.current);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, []);
+
+  const handleSendOtp = async () => {
+    setError('');
+    const cleanPhone = phone.replace(/\s/g, '');
+    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
+      setError('请输入正确的手机号');
+      return;
+    }
+    try {
+      const res = await fetch('/api/auth/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '发送验证码失败');
+      startCountdown();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '发送验证码失败');
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
-    if (!email) {
-      setError('请输入邮箱地址');
+    const cleanPhone = phone.replace(/\s/g, '');
+    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
+      setError('请输入正确的手机号');
+      return;
+    }
+    if (!code) {
+      setError('请输入验证码');
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      setError('密码至少6位');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('两次密码不一致');
       return;
     }
 
@@ -29,13 +89,13 @@ export default function ForgotPasswordPage() {
       const res = await fetch('/api/auth/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ phone: cleanPhone, code, newPassword }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '发送重置邮件失败');
+      if (!res.ok) throw new Error(data.error || '重置密码失败');
       setSuccess(true);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '发送重置邮件失败');
+      setError(err instanceof Error ? err.message : '重置密码失败');
     } finally {
       setLoading(false);
     }
@@ -53,7 +113,7 @@ export default function ForgotPasswordPage() {
           <div className="mx-auto w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center mb-1">
             <Image
               src="https://coze-coding-project.tos.coze.site/gen_project_icon/2026-06-02/7646601479696105506_1780364210.png?sign=4902428488-d0581d8927-0-61e886dc65ac9766f62e1a4e4703e68c8391f1d1b9efaadedad121b7cb27c075"
-              alt="AI多媒体创作网站"
+              alt="燃冬AI"
               width={64}
               height={64}
               className="rounded-2xl"
@@ -63,7 +123,7 @@ export default function ForgotPasswordPage() {
           <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
             找回密码
           </h1>
-          <CardDescription>输入注册邮箱，我们将发送密码重置链接</CardDescription>
+          <CardDescription>通过手机验证码重置密码</CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-4">
@@ -79,32 +139,94 @@ export default function ForgotPasswordPage() {
                 <CheckCircle2 className="w-8 h-8 text-emerald-500" />
               </div>
               <div className="space-y-2">
-                <p className="text-sm font-medium text-foreground">邮件已发送</p>
+                <p className="text-sm font-medium text-foreground">密码重置成功</p>
                 <p className="text-sm text-muted-foreground">
-                  密码重置链接已发送到 <span className="text-cyan-400">{email}</span>，
-                  请检查你的邮箱并按照指引重置密码。
+                  你的密码已成功重置，请使用新密码登录。
                 </p>
               </div>
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => { setSuccess(false); setEmail(''); }}
-              >
-                重新发送
-              </Button>
+              <Link href="/login">
+                <Button className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium">
+                  返回登录
+                </Button>
+              </Link>
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">邮箱地址</Label>
+                <Label htmlFor="phone">手机号</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="phone"
+                    type="tel"
+                    placeholder="请输入11位手机号"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    className="pl-10"
+                    maxLength={11}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="code">验证码</Label>
+                <div className="flex gap-3">
+                  <Input
+                    id="code"
+                    type="text"
+                    placeholder="请输入验证码"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="flex-1"
+                    maxLength={6}
+                    required
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={handleSendOtp}
+                    disabled={countdown > 0 || !phone}
+                    className="shrink-0 min-w-[110px]"
+                  >
+                    {countdown > 0 ? `${countdown}s` : '获取验证码'}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="newPassword">新密码</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="newPassword"
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="至少6位新密码"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="pl-10 pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="confirmPassword">确认新密码</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="confirmPassword"
+                    type="password"
+                    placeholder="再次输入新密码"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
                     className="pl-10"
                     required
                   />
@@ -117,18 +239,20 @@ export default function ForgotPasswordPage() {
                 disabled={loading}
               >
                 {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {loading ? '发送中...' : '发送重置链接'}
+                {loading ? '重置中...' : '重置密码'}
               </Button>
             </form>
           )}
         </CardContent>
 
-        <CardFooter className="justify-center">
-          <Link href="/login" className="inline-flex items-center gap-1.5 text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-            返回登录
-          </Link>
-        </CardFooter>
+        {!success && (
+          <CardFooter className="justify-center">
+            <Link href="/login" className="inline-flex items-center gap-1.5 text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
+              <ArrowLeft className="w-4 h-4" />
+              返回登录
+            </Link>
+          </CardFooter>
+        )}
       </Card>
     </div>
   );

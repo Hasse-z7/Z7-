@@ -7,32 +7,31 @@ import Image from 'next/image';
 import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, Sparkles, Mail, Lock, Phone, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Lock, Phone, Eye, EyeOff, MessageSquare, KeyRound } from 'lucide-react';
 
-type LoginTab = 'phone' | 'email';
+type LoginTab = 'sms' | 'password';
 
 export default function LoginPage() {
-  const [activeTab, setActiveTab] = useState<LoginTab>('phone');
+  const [activeTab, setActiveTab] = useState<LoginTab>('sms');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Phone login state
+  // Phone + SMS OTP state
   const [phone, setPhone] = useState('');
   const [otpCode, setOtpCode] = useState('');
   const [countdown, setCountdown] = useState(0);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Email login state
-  const [email, setEmail] = useState('');
+  // Phone + Password state
+  const [pwdPhone, setPwdPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const { login, loginWithPhone } = useAuth();
+  const { loginWithPhone, loginWithPassword } = useAuth();
   const router = useRouter();
 
-  // Cleanup countdown on unmount
   useEffect(() => {
     return () => {
       if (countdownRef.current) clearInterval(countdownRef.current);
@@ -73,7 +72,7 @@ export default function LoginPage() {
     }
   };
 
-  const handlePhoneLogin = async (e: React.FormEvent) => {
+  const handleSmsLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     const cleanPhone = phone.replace(/\s/g, '');
@@ -92,16 +91,21 @@ export default function LoginPage() {
     }
   };
 
-  const handleEmailLogin = async (e: React.FormEvent) => {
+  const handlePasswordLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!email || !password) {
-      setError('请输入邮箱和密码');
+    const cleanPhone = pwdPhone.replace(/\s/g, '');
+    if (!cleanPhone || !password) {
+      setError('请输入手机号和密码');
+      return;
+    }
+    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
+      setError('请输入正确的11位手机号');
       return;
     }
     setLoading(true);
     try {
-      await login(email, password);
+      await loginWithPassword(cleanPhone, password);
       router.push('/dashboard');
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
@@ -122,7 +126,7 @@ export default function LoginPage() {
           <div className="mx-auto w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center mb-1">
             <Image
               src="https://coze-coding-project.tos.coze.site/gen_project_icon/2026-06-02/7646601479696105506_1780364210.png?sign=4902428488-d0581d8927-0-61e886dc65ac9766f62e1a4e4703e68c8391f1d1b9efaadedad121b7cb27c075"
-              alt="AI多媒体创作网站"
+              alt="燃冬AI"
               width={64}
               height={64}
               className="rounded-2xl"
@@ -130,7 +134,7 @@ export default function LoginPage() {
             />
           </div>
           <h1 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-            AI多媒体创作网站
+            燃冬AI
           </h1>
           <CardDescription>登录你的账号，开始AI创作之旅</CardDescription>
         </CardHeader>
@@ -146,39 +150,39 @@ export default function LoginPage() {
           <div className="flex bg-muted/50 rounded-lg p-1">
             <button
               type="button"
-              onClick={() => { setActiveTab('phone'); setError(''); }}
+              onClick={() => { setActiveTab('sms'); setError(''); }}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTab === 'phone'
+                activeTab === 'sms'
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Phone className="w-4 h-4" />
-              手机号登录
+              <MessageSquare className="w-4 h-4" />
+              验证码登录
             </button>
             <button
               type="button"
-              onClick={() => { setActiveTab('email'); setError(''); }}
+              onClick={() => { setActiveTab('password'); setError(''); }}
               className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTab === 'email'
+                activeTab === 'password'
                   ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Mail className="w-4 h-4" />
-              邮箱登录
+              <KeyRound className="w-4 h-4" />
+              密码登录
             </button>
           </div>
 
-          {/* Phone Login Form */}
-          {activeTab === 'phone' && (
-            <form onSubmit={handlePhoneLogin} className="space-y-4">
+          {/* SMS Login Form */}
+          {activeTab === 'sms' && (
+            <form onSubmit={handleSmsLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="phone">手机号</Label>
+                <Label htmlFor="sms-phone">手机号</Label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">+86</span>
                   <Input
-                    id="phone"
+                    id="sms-phone"
                     type="tel"
                     placeholder="请输入手机号"
                     value={phone}
@@ -190,10 +194,10 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="otp">验证码</Label>
+                <Label htmlFor="sms-otp">验证码</Label>
                 <div className="flex gap-3">
                   <Input
-                    id="otp"
+                    id="sms-otp"
                     type="text"
                     placeholder="请输入验证码"
                     value={otpCode}
@@ -223,42 +227,41 @@ export default function LoginPage() {
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                手机号验证码登录即自动注册，新用户赠送50算力点
+                验证码登录即自动注册，新用户赠送50算力点
               </p>
             </form>
           )}
 
-          {/* Email Login Form */}
-          {activeTab === 'email' && (
-            <form onSubmit={handleEmailLogin} className="space-y-4">
+          {/* Password Login Form */}
+          {activeTab === 'password' && (
+            <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">邮箱地址</Label>
+                <Label htmlFor="pwd-phone">手机号</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="your@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    id="pwd-phone"
+                    type="tel"
+                    placeholder="请输入11位手机号"
+                    value={pwdPhone}
+                    onChange={(e) => setPwdPhone(e.target.value)}
                     className="pl-10"
-                    required
+                    maxLength={11}
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">密码</Label>
+                <Label htmlFor="pwd-password">密码</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    id="password"
+                    id="pwd-password"
                     type={showPassword ? 'text' : 'password'}
                     placeholder="输入密码"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="pl-10 pr-10"
-                    required
                   />
                   <button
                     type="button"
