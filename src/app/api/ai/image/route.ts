@@ -51,11 +51,21 @@ export async function POST(request: NextRequest) {
 
     const { supabase } = authResult;
 
-    // 计算算力消耗：免费模型不扣算力，收费模型按实际张数扣点
-    const count = imageCount || 1;
-    const creditsCost = isFreeModel ? 0 : CREDITS_PER_IMAGE * count;
+    // 获取用户免费额度，判断免费模型是否真正免费
+    const { data: userProfile } = await supabase
+      .from('profiles')
+      .select('free_credits, paid_credits')
+      .eq('user_id', authResult.user.id)
+      .maybeSingle();
+    const userFreeCredits = userProfile?.free_credits || 0;
+    // 免费模型：仅当用户有免费额度时才免费，否则正常扣费
+    const actuallyFree = isFreeModel && userFreeCredits > 0;
 
-    // ========== 1. 扣算力（免费模型跳过） ==========
+    // 计算算力消耗
+    const count = imageCount || 1;
+    const creditsCost = actuallyFree ? 0 : CREDITS_PER_IMAGE * count;
+
+    // ========== 1. 扣算力（免费跳过） ==========
     let deduction: Awaited<ReturnType<typeof deductCredits>> | null = null;
     if (creditsCost > 0) {
       deduction = await deductCredits(supabase, authResult.user.id, creditsCost);
@@ -144,7 +154,7 @@ export async function POST(request: NextRequest) {
       image_urls: generatedUrls,
       credits_cost: creditsCost,
       remaining_credits: remainingCredits,
-      is_free: isFreeModel,
+      is_free: actuallyFree,
       project_id: resolvedProjectId,
       work_id: workId,
     });

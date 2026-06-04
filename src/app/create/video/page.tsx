@@ -839,7 +839,7 @@ export default function CreateVideoPage() {
                     )}
                     {models.map((m) => (
                       <option key={m.endpoint_id} value={m.endpoint_id}>
-                        {m.name}{m.is_free ? ' [免费]' : ` [${3}算力/秒]`}
+                        {m.name}{(m.is_free && (profile?.free_credits ?? 0) > 0) ? ' [免费]' : ` [${3}算力/秒]`}
                       </option>
                     ))}
                   </select>
@@ -852,7 +852,7 @@ export default function CreateVideoPage() {
                       <p className="text-xs text-muted-foreground truncate">
                         {selectedModel?.description || selectedModelEndpoint}
                       </p>
-                      {selectedModel?.is_free ? (
+                      {(selectedModel?.is_free && (profile?.free_credits ?? 0) > 0) ? (
                         <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0">免费</Badge>
                       ) : (
                         <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0">3算力/秒</Badge>
