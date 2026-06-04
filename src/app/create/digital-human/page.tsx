@@ -11,6 +11,14 @@ import {
   Bot, Download, Sparkles, Loader2, UserRound, MonitorSmartphone
 } from 'lucide-react';
 
+interface AIModel {
+  id: string;
+  name: string;
+  endpoint_id: string;
+  category: string;
+  description: string;
+}
+
 interface Template {
   id: string;
   name: string;
@@ -28,19 +36,13 @@ const avatars = [
   { id: 'assistant', name: '智能助手', icon: '🤖', desc: '通用数字人' },
 ];
 
-const voices = [
-  { id: 'zh_female_shuangkuaisisi_mars_bigtts', name: '女声-活泼', desc: '明亮活泼的女声' },
-  { id: 'zh_male_chunhou_mars_bigtts', name: '男声-沉稳', desc: '低沉稳重的男声' },
-  { id: 'zh_female_wanxiaomeng_mars_bigtts', name: '女声-温柔', desc: '温柔知性的女声' },
-  { id: 'zh_male_lizhi_mars_bigtts', name: '男声-励志', desc: '激情有力的男声' },
-];
-
 export default function CreateDigitalHumanPage() {
   const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
   const [prompt, setPrompt] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('news_anchor');
-  const [selectedVoice, setSelectedVoice] = useState('zh_female_shuangkuaisisi_mars_bigtts');
+  const [voices, setVoices] = useState<AIModel[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState('zh_female_xiaohe_uranus_bigtts');
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [loading, setLoading] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
@@ -56,7 +58,25 @@ export default function CreateDigitalHumanPage() {
     }
   }, []);
 
-  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
+  const fetchVoices = useCallback(async () => {
+    try {
+      const res = await fetch('/api/models?category=tts');
+      const data = await res.json();
+      if (data.models) {
+        setVoices(data.models);
+        const saved = localStorage.getItem('selected_tts_voice');
+        if (saved && data.models.some((m: AIModel) => m.endpoint_id === saved)) {
+          setSelectedVoice(saved);
+        } else if (data.models.length > 0) {
+          setSelectedVoice(data.models[0].endpoint_id);
+        }
+      }
+    } catch (err) {
+      console.error('Fetch voices error:', err);
+    }
+  }, []);
+
+  useEffect(() => { fetchTemplates(); fetchVoices(); }, [fetchTemplates, fetchVoices]);
 
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
@@ -81,9 +101,9 @@ export default function CreateDigitalHumanPage() {
         }),
       });
       const data = await res.json();
-      const videoUrl = data.video_url || data.url;
-      if (videoUrl) {
-        setResultUrl(videoUrl);
+      const resultUrl = data.audio_url || data.video_url || data.url;
+      if (resultUrl) {
+        setResultUrl(resultUrl);
         if (data.remaining_credits !== undefined) {
           updateCredits(data.remaining_credits);
         }
@@ -146,14 +166,17 @@ export default function CreateDigitalHumanPage() {
                     <div
                       key={v.id}
                       className={`p-3 rounded-lg border cursor-pointer transition-all hover:-translate-y-0.5 ${
-                        selectedVoice === v.id
+                        selectedVoice === v.endpoint_id
                           ? 'border-amber-500 bg-amber-500/10'
                           : 'border-border/50 hover:border-amber-500/30'
                       }`}
-                      onClick={() => setSelectedVoice(v.id)}
+                      onClick={() => {
+                        setSelectedVoice(v.endpoint_id);
+                        localStorage.setItem('selected_tts_voice', v.endpoint_id);
+                      }}
                     >
                       <p className="text-sm font-medium">{v.name}</p>
-                      <p className="text-xs text-muted-foreground">{v.desc}</p>
+                      <p className="text-xs text-muted-foreground">{v.description}</p>
                     </div>
                   ))}
                 </div>

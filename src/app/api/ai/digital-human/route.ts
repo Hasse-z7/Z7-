@@ -11,9 +11,9 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { text, voice_type, avatar } = body;
+    const { prompt, voice_type, avatar_style, orientation } = body;
 
-    if (!text) {
+    if (!prompt) {
       return NextResponse.json({ error: '请输入播报文本' }, { status: 400 });
     }
 
@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate TTS audio
-    const audioUrl = await generateTTS(text, voice_type || 'zh_female_cancan');
+    const audioUrl = await generateTTS(request, prompt, voice_type || 'zh_female_xiaohe_uranus_bigtts');
 
     // Deduct credits
     const newCredits = profile.credits - creditsCost;
@@ -76,9 +76,9 @@ export async function POST(request: NextRequest) {
       user_id: authResult.user.id,
       work_type: 'digital_human',
       file_url: audioUrl,
-      prompt: text,
+      prompt: prompt,
       credits_cost: creditsCost,
-      metadata: { voice_type, avatar },
+      metadata: { voice_type, avatar_style, orientation },
     });
 
     return NextResponse.json({

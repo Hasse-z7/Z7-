@@ -29,9 +29,10 @@ export async function generateImage(
   size: string = '2K',
   imageUrls?: string[],
   modelEndpoint?: string,
+  requestHeaders?: Record<string, string>,
 ): Promise<string[]> {
   const config = getPlatformConfig();
-  const client = new ImageGenerationClient(config);
+  const client = new ImageGenerationClient(config, requestHeaders || {});
 
   const request: Record<string, unknown> = {
     prompt,
@@ -181,7 +182,7 @@ export async function generateTTS(
   };
 
   if (voiceType) {
-    ttsRequest.voice_type = voiceType;
+    ttsRequest.speaker = voiceType;
   }
 
   const response = await client.synthesize(ttsRequest as unknown as Parameters<typeof client.synthesize>[0]);

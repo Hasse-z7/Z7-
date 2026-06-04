@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateImage } from '@/lib/coze-api';
+import { HeaderUtils } from 'coze-coding-dev-sdk';
 import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     // ========== 2. 调用AI模型生成图片 ==========
     let generatedUrls: string[];
     try {
-      generatedUrls = await generateImage(prompt || '', size || '2K', image_urls, model_endpoint);
+      generatedUrls = await generateImage(prompt || '', size || '2K', image_urls, model_endpoint, HeaderUtils.extractForwardHeaders(request.headers) as Record<string, string>);
     } catch (aiError: unknown) {
       // AI调用失败，退还已扣除的算力
       await refundCredits(supabase, authResult.user.id, deduction);
