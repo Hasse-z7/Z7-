@@ -67,8 +67,7 @@ export default function Navbar() {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2 shrink-0">
-          <img src="/logo-light.jpg" alt="燃冬AI" className="h-8 w-8 rounded-lg object-cover block dark:hidden" />
-          <img src="/logo-dark.png" alt="燃冬AI" className="h-8 w-8 rounded-lg object-cover hidden dark:block" />
+          <img src="/logo.png" alt="燃冬AI" className="h-8 w-8 rounded-lg object-cover" />
           <span className="font-bold text-lg bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent hidden sm:inline">
             燃冬AI
           </span>

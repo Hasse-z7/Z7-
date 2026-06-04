@@ -125,7 +125,7 @@ export default function LoginPage() {
         <CardHeader className="text-center space-y-3">
           <div className="mx-auto w-16 h-16 rounded-2xl overflow-hidden flex items-center justify-center mb-1">
             <Image
-              src="https://coze-coding-project.tos.coze.site/gen_project_icon/2026-06-02/7646601479696105506_1780364210.png?sign=4902428488-d0581d8927-0-61e886dc65ac9766f62e1a4e4703e68c8391f1d1b9efaadedad121b7cb27c075"
+              src="/logo.png"
               alt="燃冬AI"
               width={64}
               height={64}
