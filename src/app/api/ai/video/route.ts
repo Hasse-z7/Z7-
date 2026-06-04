@@ -24,7 +24,7 @@ async function resolveProject(supabase: import('@supabase/supabase-js').Supabase
 }
 
 /** 获取模型接入点ID：从前端传来的model_id查询数据库，无效则报错 */
-async function resolveModelEndpoint(modelId: string | undefined, category: string): Promise<{ endpointId: string; modelName: string; isFree: boolean }> {
+async function resolveModelEndpoint(modelId: string | undefined, category: string): Promise<{ endpointId: string; modelName: string; isFree: boolean; platform: string }> {
   // 未传model_id，返回错误
   if (!modelId) {
     throw new Error('请选择有效的生成模型');
@@ -38,27 +38,27 @@ async function resolveModelEndpoint(modelId: string | undefined, category: strin
   // 先按 id (UUID) 查找
   const { data: byId } = await supabase
     .from('ai_models')
-    .select('endpoint_id, name, category, is_active, is_free')
+    .select('endpoint_id, name, category, is_active, is_free, platform')
     .eq('id', modelId)
     .maybeSingle();
 
   if (byId) {
     if (!byId.is_active) throw new Error('该模型已停用，请选择其他模型');
     if (byId.category !== category) throw new Error('该模型不适用于当前功能');
-    return { endpointId: byId.endpoint_id, modelName: byId.name, isFree: byId.is_free === true };
+    return { endpointId: byId.endpoint_id, modelName: byId.name, isFree: byId.is_free === true, platform: byId.platform || 'coze' };
   }
 
   // 再按 endpoint_id 精确查找
   const { data: byEndpoint } = await supabase
     .from('ai_models')
-    .select('endpoint_id, name, category, is_active, is_free')
+    .select('endpoint_id, name, category, is_active, is_free, platform')
     .eq('endpoint_id', modelId)
     .maybeSingle();
 
   if (byEndpoint) {
     if (!byEndpoint.is_active) throw new Error('该模型已停用，请选择其他模型');
     if (byEndpoint.category !== category) throw new Error('该模型不适用于当前功能');
-    return { endpointId: byEndpoint.endpoint_id, modelName: byEndpoint.name, isFree: byEndpoint.is_free === true };
+    return { endpointId: byEndpoint.endpoint_id, modelName: byEndpoint.name, isFree: byEndpoint.is_free === true, platform: byEndpoint.platform || 'coze' };
   }
 
   throw new Error('请选择有效的生成模型');
@@ -105,11 +105,13 @@ export async function POST(request: NextRequest) {
     let modelEndpoint: string;
     let modelName: string;
     let isFreeModel: boolean;
+    let modelPlatform: string;
     try {
       const resolved = await resolveModelEndpoint(model_id, 'video');
       modelEndpoint = resolved.endpointId;
       modelName = resolved.modelName;
       isFreeModel = resolved.isFree;
+      modelPlatform = resolved.platform;
     } catch (modelError: unknown) {
       const msg = modelError instanceof Error ? modelError.message : '请选择有效的生成模型';
       return NextResponse.json({ error: msg }, { status: 400 });
@@ -174,6 +176,7 @@ export async function POST(request: NextRequest) {
         free_deducted: deduction?.freeDeducted ?? 0,
         paid_deducted: deduction?.paidDeducted ?? 0,
         model_endpoint: modelEndpoint,
+        model_platform: modelPlatform,
         project_id: resolvedProjectId,
       })
       .select('id')

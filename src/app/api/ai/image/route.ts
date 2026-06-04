@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateImage } from '@/lib/coze-api';
-import { generateImageViaDmxapi, isDmxapiModel } from '@/lib/dmxapi-client';
+import { generateImageViaDmxapi, generateImageViaMj, isDmxapiModel } from '@/lib/dmxapi-client';
 import { HeaderUtils } from 'coze-coding-dev-sdk';
 import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
@@ -81,7 +81,15 @@ export async function POST(request: NextRequest) {
     // ========== 2. 调用AI模型生成图片 ==========
     let generatedUrls: string[];
     try {
-      if (isDmxapiModel(modelPlatform)) {
+      if (model_endpoint.startsWith('mj_')) {
+        // Midjourney models via dmxapi.cn MJ API
+        const mjMode = model_endpoint.includes('turbo') ? 'turbo' : model_endpoint.includes('relax') ? 'relax' : 'fast';
+        const result = await generateImageViaMj({
+          prompt: prompt || '',
+          mode: mjMode,
+        });
+        generatedUrls = [result.imageUrl];
+      } else if (isDmxapiModel(modelPlatform)) {
         // Use dmxapi.cn for OpenAI-compatible models
         const result = await generateImageViaDmxapi({
           prompt: prompt || '',

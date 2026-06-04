@@ -18,6 +18,7 @@
 import { NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { generateVideo } from '@/lib/coze-api';
+import { generateVideoViaDmxapi, isDmxapiModel } from '@/lib/dmxapi-client';
 import { refundCredits, recordTransaction } from '@/lib/credits-helpers';
 import type { DeductionResult } from '@/lib/credits-helpers';
 
@@ -109,27 +110,47 @@ async function processTask(taskId: string): Promise<void> {
 
     // ========== 3. 通过SDK调用视频生成 ==========
     try {
-      const result = await generateVideo(
-        // 不再传递假 NextRequest，避免 HeaderUtils 提取干扰头
-        null,
-        {
-          prompt: task.prompt || undefined,
-          imageUrl: primaryImageUrl,
+      let videoUrl: string;
+      let lastFrameUrl: string | undefined;
+
+      const taskPlatform = task.model_platform || 'coze';
+
+      if (isDmxapiModel(taskPlatform)) {
+        // 使用 dmxapi.cn 生成视频
+        console.info(`[VideoWorker] 使用dmxapi.cn生成: model=${task.model_endpoint}`);
+        const result = await generateVideoViaDmxapi({
+          prompt: task.prompt || '',
+          model: task.model_endpoint || 'doubao-seedance-1-5-pro-responses',
           duration: task.duration || 5,
           resolution: task.quality || '720p',
-          ratio: task.ratio || '16:9',
-          generateAudio: task.audio_enabled ?? true,
-          modelEndpoint: task.model_endpoint || 'doubao-seedance-1-5-pro-251215',
-        },
-      );
+          imageUrl: primaryImageUrl,
+        });
+        videoUrl = result.videoUrl;
+      } else {
+        // 使用 Coze SDK 生成视频
+        const result = await generateVideo(
+          null,
+          {
+            prompt: task.prompt || undefined,
+            imageUrl: primaryImageUrl,
+            duration: task.duration || 5,
+            resolution: task.quality || '720p',
+            ratio: task.ratio || '16:9',
+            generateAudio: task.audio_enabled ?? true,
+            modelEndpoint: task.model_endpoint || 'doubao-seedance-1-5-pro-251215',
+          },
+        );
+        videoUrl = result.videoUrl;
+        lastFrameUrl = result.lastFrameUrl;
+      }
 
       // ========== 4. 任务成功 ==========
       await supabase
         .from('video_tasks')
         .update({
           status: 'succeeded',
-          video_url: result.videoUrl,
-          last_frame_url: result.lastFrameUrl || null,
+          video_url: videoUrl,
+          last_frame_url: lastFrameUrl || null,
           completed_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         })
@@ -141,20 +162,20 @@ async function processTask(taskId: string): Promise<void> {
         userId: task.user_id,
         action: 'succeeded',
         modelEndpoint: task.model_endpoint,
-        responseData: { videoUrl: result.videoUrl },
+        responseData: { videoUrl },
       });
 
       // 保存到用户作品（关联项目的project_id）
       await supabase.from('user_works').insert({
         user_id: task.user_id,
         work_type: 'video',
-        file_url: result.videoUrl,
+        file_url: videoUrl,
         prompt: task.prompt || '',
         credits_cost: task.credits_cost,
         project_id: task.project_id || null,
       });
 
-      console.info(`[VideoWorker] 任务成功 ${taskId.slice(0, 8)}: 视频=${result.videoUrl.slice(0, 60)}...`);
+      console.info(`[VideoWorker] 任务成功 ${taskId.slice(0, 8)}: 视频=${videoUrl.slice(0, 60)}...`);
 
     } catch (genError: unknown) {
       const errMsg = genError instanceof Error ? genError.message : '视频生成失败';
