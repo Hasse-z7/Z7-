@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateImage } from '@/lib/coze-api';
+import { generateImageViaDmxapi, isDmxapiModel } from '@/lib/dmxapi-client';
 import { HeaderUtils } from 'coze-coding-dev-sdk';
 import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
@@ -35,7 +36,7 @@ export async function POST(request: NextRequest) {
     const adminClient = getSupabaseClient();
     const { data: modelData, error: modelError } = await adminClient
       .from('ai_models')
-      .select('endpoint_id, name')
+      .select('endpoint_id, name, platform')
       .eq('endpoint_id', model_endpoint)
       .eq('category', 'image')
       .eq('is_active', true)
@@ -44,6 +45,8 @@ export async function POST(request: NextRequest) {
     if (modelError || !modelData) {
       return NextResponse.json({ error: '请选择有效的生成模型' }, { status: 400 });
     }
+
+    const modelPlatform = modelData.platform || 'coze';
 
     const { supabase } = authResult;
 
@@ -64,7 +67,19 @@ export async function POST(request: NextRequest) {
     // ========== 2. 调用AI模型生成图片 ==========
     let generatedUrls: string[];
     try {
-      generatedUrls = await generateImage(prompt || '', size || '2K', image_urls, model_endpoint, HeaderUtils.extractForwardHeaders(request.headers) as Record<string, string>);
+      if (isDmxapiModel(modelPlatform)) {
+        // Use dmxapi.cn for OpenAI-compatible models
+        const result = await generateImageViaDmxapi({
+          prompt: prompt || '',
+          model: model_endpoint,
+          size: size || '1024x1024',
+          n: count,
+        });
+        generatedUrls = result.urls;
+      } else {
+        // Use Coze SDK for platform models
+        generatedUrls = await generateImage(prompt || '', size || '2K', image_urls, model_endpoint, HeaderUtils.extractForwardHeaders(request.headers) as Record<string, string>);
+      }
     } catch (aiError: unknown) {
       // AI调用失败，退还已扣除的算力
       await refundCredits(supabase, authResult.user.id, deduction);
