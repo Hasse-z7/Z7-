@@ -1,8 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 
+/** 检查系统开关 */
+async function isFeatureOpen(key: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase.from('system_config').select('value').eq('key', key).single();
+    return data?.value === 'true';
+  } catch {
+    return true;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // 检查注册开关（新用户注册时）
     const { phone, code } = await request.json();
 
     if (!phone || !code) {
@@ -31,7 +43,15 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (!existingProfile) {
-        // 新用户：创建 profile（无注册赠送）
+        // 新用户：检查注册开关
+        const registrationOpen = await isFeatureOpen('registration_open');
+        if (!registrationOpen) {
+          // 删除刚创建的auth用户，阻止注册
+          const adminSupabase = getSupabaseClient();
+          await adminSupabase.auth.admin.deleteUser(userId);
+          return NextResponse.json({ error: '注册暂时关闭，请稍后再试' }, { status: 403 });
+        }
+        // 创建 profile（无注册赠送）
         const phoneSuffix = cleanPhone.slice(-4);
         const nickname = `用户${phoneSuffix}`;
         await supabase.from('profiles').insert({

@@ -6,8 +6,25 @@ function phoneToVirtualEmail(phone: string): string {
   return `${phone}@phone.local`;
 }
 
+/** 检查系统开关 */
+async function isFeatureOpen(key: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase.from('system_config').select('value').eq('key', key).single();
+    return data?.value === 'true';
+  } catch {
+    return true;
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
+    // 检查注册开关
+    const registrationOpen = await isFeatureOpen('registration_open');
+    if (!registrationOpen) {
+      return NextResponse.json({ error: '注册暂时关闭，请稍后再试' }, { status: 403 });
+    }
+
     const { phone, password, nickname } = await request.json();
 
     if (!phone || !password) {

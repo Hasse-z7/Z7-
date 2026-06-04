@@ -7,6 +7,17 @@ import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } fr
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { acquireAISlot, releaseSlot } from '@/lib/rate-limiter';
 
+/** 检查系统开关 */
+async function isFeatureOpen(key: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase.from('system_config').select('value').eq('key', key).single();
+    return data?.value === 'true';
+  } catch {
+    return true; // 查询失败默认开放
+  }
+}
+
 /** 验证项目是否属于该用户，不存在则返回null */
 async function resolveProject(supabase: ReturnType<typeof getSupabaseClient> extends Promise<infer T> ? T : ReturnType<typeof getSupabaseClient>, userId: string, projectId?: string) {
   if (!projectId) return null;
@@ -16,6 +27,16 @@ async function resolveProject(supabase: ReturnType<typeof getSupabaseClient> ext
 
 export async function POST(request: NextRequest) {
   try {
+    // 检查系统开关
+    const imageOpen = await isFeatureOpen('image_generation_open');
+    if (!imageOpen) {
+      return NextResponse.json({ error: 'AI生图功能暂时关闭，请稍后再试' }, { status: 503 });
+    }
+    const maintenanceMode = await isFeatureOpen('maintenance_mode');
+    if (maintenanceMode) {
+      return NextResponse.json({ error: '系统维护中，请稍后再试' }, { status: 503 });
+    }
+
     const authResult = await getAuthUser(request);
     if (!authResult.user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });

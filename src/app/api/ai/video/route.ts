@@ -16,6 +16,18 @@ import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_SECOND } f
 import { isCircuitBreakerOpen } from '@/lib/ark-config';
 import { createClient } from '@supabase/supabase-js';
 import { acquireAISlot, releaseSlot } from '@/lib/rate-limiter';
+import { getSupabaseClient } from '@/storage/database/supabase-client';
+
+/** 检查系统开关 */
+async function isFeatureOpen(key: string): Promise<boolean> {
+  try {
+    const supabase = getSupabaseClient();
+    const { data } = await supabase.from('system_config').select('value').eq('key', key).single();
+    return data?.value === 'true';
+  } catch {
+    return true;
+  }
+}
 
 /** 验证项目是否属于该用户，不存在则返回null */
 async function resolveProject(supabase: import('@supabase/supabase-js').SupabaseClient, userId: string, projectId?: string): Promise<string | null> {
@@ -67,13 +79,23 @@ async function resolveModelEndpoint(modelId: string | undefined, category: strin
 
 export async function POST(request: NextRequest) {
   try {
-    // ========== 0. 认证校验 ==========
+    // ========== 0. 系统开关检查 ==========
+    const videoOpen = await isFeatureOpen('video_generation_open');
+    if (!videoOpen) {
+      return NextResponse.json({ error: 'AI生视频功能暂时关闭，请稍后再试' }, { status: 503 });
+    }
+    const maintenanceMode = await isFeatureOpen('maintenance_mode');
+    if (maintenanceMode) {
+      return NextResponse.json({ error: '系统维护中，请稍后再试' }, { status: 503 });
+    }
+
+    // ========== 认证校验 ==========
     const authResult = await getAuthUser(request);
     if (!authResult.user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
     }
 
-    // ========== 1. 熔断检查 ==========
+    // ========== 熔断检查 ==========
     if (isCircuitBreakerOpen()) {
       return NextResponse.json(
         { error: '系统繁忙，请稍后再试' },

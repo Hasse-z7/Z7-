@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Users, CreditCard, Zap, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon
+  Users, CreditCard, Zap, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon, Settings
 } from 'lucide-react';
 
 interface Profile {
@@ -158,6 +158,7 @@ export default function AdminPage() {
             <TabsTrigger value="orders"><CreditCard className="w-4 h-4 mr-1" />订单</TabsTrigger>
             <TabsTrigger value="credits"><Zap className="w-4 h-4 mr-1" />算力</TabsTrigger>
             <TabsTrigger value="models"><Cpu className="w-4 h-4 mr-1" />模型</TabsTrigger>
+            <TabsTrigger value="system"><Settings className="w-4 h-4 mr-1" />系统</TabsTrigger>
           </TabsList>
 
           <div className="mt-6 overflow-x-auto">
@@ -350,8 +351,202 @@ export default function AdminPage() {
               </div>
             )}
           </div>
+
+          {/* 系统控制 */}
+          {tab === 'system' && (
+            <SystemControl />
+          )}
         </Tabs>
       </div>
+    </div>
+  );
+}
+
+/** 系统控制面板组件 */
+function SystemControl() {
+  const [config, setConfig] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState<string | null>(null);
+  const [announcementText, setAnnouncementText] = useState('');
+  const [announcementEnabled, setAnnouncementEnabled] = useState(false);
+
+  const fetchConfig = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('sb-access-token');
+      const res = await fetch('/api/system-config', {
+        headers: { 'x-session': token || '' },
+      });
+      const data = await res.json();
+      if (data.config) {
+        setConfig(data.config);
+        // Parse announcement
+        try {
+          const ann = JSON.parse(data.config.announcement || '{}');
+          setAnnouncementText(ann.text || '');
+          setAnnouncementEnabled(ann.enabled || false);
+        } catch { /* ignore */ }
+      }
+    } catch (err) {
+      console.error('Failed to fetch system config:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchConfig(); }, [fetchConfig]);
+
+  const updateConfig = async (key: string, value: string) => {
+    setSaving(key);
+    try {
+      const token = localStorage.getItem('sb-access-token');
+      const res = await fetch('/api/system-config', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'x-session': token || '' },
+        body: JSON.stringify({ key, value }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setConfig(prev => ({ ...prev, [key]: value }));
+      } else {
+        alert('更新失败: ' + (data.error || '未知错误'));
+      }
+    } catch (err) {
+      alert('更新失败: ' + String(err));
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const toggleSwitch = (key: string) => {
+    const currentValue = config[key] === 'true';
+    updateConfig(key, currentValue ? 'false' : 'true');
+  };
+
+  const updateAnnouncement = async () => {
+    const value = JSON.stringify({ text: announcementText, enabled: announcementEnabled });
+    await updateConfig('announcement', value);
+  };
+
+  const switches = [
+    { key: 'registration_open', label: '开放注册', desc: '关闭后新用户无法注册' },
+    { key: 'maintenance_mode', label: '维护模式', desc: '开启后所有AI功能暂停' },
+    { key: 'image_generation_open', label: 'AI生图', desc: '关闭后用户无法生成图片' },
+    { key: 'video_generation_open', label: 'AI生视频', desc: '关闭后用户无法生成视频' },
+    { key: 'music_generation_open', label: 'AI音乐', desc: '关闭后用户无法生成音乐' },
+    { key: 'digital_human_open', label: 'AI数字人', desc: '关闭后用户无法使用数字人' },
+  ];
+
+  if (loading) {
+    return <div className="text-center py-12 text-slate-400">加载中...</div>;
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 功能开关 */}
+      <Card className="bg-slate-900/50 border-slate-700/50">
+        <CardHeader>
+          <CardTitle className="text-slate-100">功能开关</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {switches.map(sw => (
+              <div key={sw.key} className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
+                <div>
+                  <div className="font-medium text-slate-200">{sw.label}</div>
+                  <div className="text-xs text-slate-400 mt-0.5">{sw.desc}</div>
+                </div>
+                <button
+                  onClick={() => toggleSwitch(sw.key)}
+                  disabled={saving === sw.key}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                    config[sw.key] === 'true' ? 'bg-emerald-500' : 'bg-slate-600'
+                  } ${saving === sw.key ? 'opacity-50' : ''}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                    config[sw.key] === 'true' ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 全局公告 */}
+      <Card className="bg-slate-900/50 border-slate-700/50">
+        <CardHeader>
+          <CardTitle className="text-slate-100">全局公告</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setAnnouncementEnabled(!announcementEnabled)}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                  announcementEnabled ? 'bg-emerald-500' : 'bg-slate-600'
+                }`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                  announcementEnabled ? 'translate-x-6' : 'translate-x-1'
+                }`} />
+              </button>
+              <span className="text-sm text-slate-300">启用公告</span>
+            </div>
+            <textarea
+              value={announcementText}
+              onChange={(e) => setAnnouncementText(e.target.value)}
+              placeholder="输入公告内容..."
+              className="w-full h-24 rounded-lg bg-slate-800 border border-slate-700 text-slate-200 p-3 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-sky-500"
+            />
+            <Button onClick={updateAnnouncement} disabled={saving === 'announcement'} size="sm">
+              保存公告
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 参数配置 */}
+      <Card className="bg-slate-900/50 border-slate-700/50">
+        <CardHeader>
+          <CardTitle className="text-slate-100">参数配置</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
+              <label className="text-sm text-slate-300">每用户同时AI任务上限</label>
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="number"
+                  value={config.max_concurrent_per_user || '3'}
+                  onChange={(e) => setConfig(prev => ({ ...prev, max_concurrent_per_user: e.target.value }))}
+                  className="w-20 rounded bg-slate-700 border border-slate-600 text-slate-200 p-1.5 text-sm text-center"
+                  min={1}
+                  max={20}
+                />
+                <Button size="sm" onClick={() => updateConfig('max_concurrent_per_user', config.max_concurrent_per_user || '3')}>
+                  保存
+                </Button>
+              </div>
+            </div>
+            <div className="p-4 rounded-lg bg-slate-800/50 border border-slate-700/50">
+              <label className="text-sm text-slate-300">排队超时秒数</label>
+              <div className="flex items-center gap-2 mt-2">
+                <input
+                  type="number"
+                  value={config.queue_timeout_seconds || '60'}
+                  onChange={(e) => setConfig(prev => ({ ...prev, queue_timeout_seconds: e.target.value }))}
+                  className="w-20 rounded bg-slate-700 border border-slate-600 text-slate-200 p-1.5 text-sm text-center"
+                  min={10}
+                  max={300}
+                />
+                <Button size="sm" onClick={() => updateConfig('queue_timeout_seconds', config.queue_timeout_seconds || '60')}>
+                  保存
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }
