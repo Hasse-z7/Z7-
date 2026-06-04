@@ -126,7 +126,9 @@ pnpm ts-check          # TypeScript类型检查
 - 管理后台：`/admin` 模型Tab页，支持CRUD操作
 - 前端生图/生视频页面自动加载对应category的模型列表，用户下拉选择
 - 模型Endpoint ID透传到后端，后端校验数据库中模型是否存在且active
-- 默认模型：视频=Seedance 1.0 Pro (ark-45c3d43e-bbd4-48ef-b995-4f156a2c1967-31b72)，图片=Doubao Seed (doubao-seed-2-0-pro-260215)
+- 默认模型：视频=Seedance 1.5 Pro (doubao-seedance-1-5-pro-251215)，图片=Seedream 5.0 (doubao-seedream-5-0-260128)
+- 图片模型：Seedream 5.0（平台 integration.coze.cn 端点，doubao-seed 系列在该端点不可用）
+- 视频模型：Seedance 1.5 Pro（平台 integration.coze.cn 端点）
 
 ## 算力规则
 

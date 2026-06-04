@@ -9,45 +9,10 @@ import {
 import type { NextRequest } from 'next/server';
 
 /**
- * Config factory for IMAGE generation.
- * Uses user's COZE_API_KEY (sk-xxx) with api.coze.cn if available.
- * Falls back to platform defaults.
+ * Get platform Config (integration.coze.cn + COZE_WORKLOAD_IDENTITY_API_KEY).
+ * This is the only working endpoint for all AI generation features.
  */
-function getImageConfig(): Config {
-  const userApiKey = process.env.COZE_API_KEY;
-  if (userApiKey) {
-    return new Config({
-      apiKey: userApiKey,
-      baseUrl: 'https://api.coze.cn',
-      modelBaseUrl: 'https://api.coze.cn/api/v3',
-    });
-  }
-  return new Config();
-}
-
-/**
- * Config factory for VIDEO generation.
- * ALWAYS uses platform's COZE_WORKLOAD_IDENTITY_API_KEY + integration.coze.cn,
- * because user's sk-xxx key does not have video generation permissions.
- */
-function getVideoConfig(): Config {
-  return new Config();
-}
-
-/**
- * Config factory for TTS/LLM.
- * Uses user's COZE_API_KEY with api.coze.cn if available.
- * Falls back to platform defaults.
- */
-function getTTSConfig(): Config {
-  const userApiKey = process.env.COZE_API_KEY;
-  if (userApiKey) {
-    return new Config({
-      apiKey: userApiKey,
-      baseUrl: 'https://api.coze.cn',
-      modelBaseUrl: 'https://api.coze.cn/api/v3',
-    });
-  }
+function getPlatformConfig(): Config {
   return new Config();
 }
 
@@ -65,7 +30,8 @@ export async function generateImage(
   imageUrls?: string[],
   modelEndpoint?: string,
 ): Promise<string[]> {
-  const client = new ImageGenerationClient(getImageConfig());
+  const config = getPlatformConfig();
+  const client = new ImageGenerationClient(config);
 
   const request: Record<string, unknown> = {
     prompt,
@@ -105,7 +71,7 @@ export async function generateVideo(
     modelEndpoint?: string;
   },
 ): Promise<{ videoUrl: string; lastFrameUrl?: string }> {
-  const config = getVideoConfig();
+  const config = getPlatformConfig();
   let customHeaders: Record<string, string> = {};
 
   // Only extract forward headers from a real NextRequest
@@ -173,7 +139,8 @@ export async function generateVideo(
 // ==================== AI Music Generation ====================
 
 export async function generateMusic(prompt: string, style?: string): Promise<string> {
-  const client = new LLMClient(getTTSConfig());
+  const config = getPlatformConfig();
+  const client = new LLMClient(config);
 
   const systemPrompt = `你是一位专业的音乐创作AI。根据用户描述生成音乐创作方案，包含曲风、节奏、乐器编配等。${
     style ? `用户指定曲风：${style}。` : ''
@@ -204,7 +171,7 @@ export async function generateTTS(
   text: string,
   voiceType?: string,
 ): Promise<string> {
-  const config = getTTSConfig();
+  const config = getPlatformConfig();
   const customHeaders = HeaderUtils.extractForwardHeaders(request.headers);
   const client = new TTSClient(config, customHeaders as Record<string, string>);
 
