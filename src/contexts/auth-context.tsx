@@ -20,12 +20,13 @@ interface UserProfile {
 }
 
 interface AuthContextType {
-  user: { id: string; email: string } | null;
+  user: { id: string; email: string; phone?: string } | null;
   profile: UserProfile | null;
   loading: boolean;
   token: string | null;
   refreshProfile: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
+  loginWithPhone: (phone: string, code: string) => Promise<void>;
   register: (email: string, password: string, nickname: string) => Promise<void>;
   logout: () => Promise<void>;
   updateCredits: (credits: number) => void;
@@ -38,6 +39,7 @@ const AuthContext = createContext<AuthContextType>({
   token: null,
   refreshProfile: async () => {},
   login: async () => {},
+  loginWithPhone: async () => {},
   register: async () => {},
   logout: async () => {},
   updateCredits: () => {},
@@ -46,7 +48,7 @@ const AuthContext = createContext<AuthContextType>({
 const TOKEN_KEY = 'sb-access-token';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<{ id: string; email: string } | null>(null);
+  const [user, setUser] = useState<{ id: string; email: string; phone?: string } | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
@@ -95,7 +97,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '登录失败');
 
-    // Store token in localStorage for cross-origin iframe support
+    if (data.access_token) {
+      localStorage.setItem(TOKEN_KEY, data.access_token);
+      setToken(data.access_token);
+    }
+
+    setUser(data.user);
+    setProfile(data.profile);
+  }, []);
+
+  const loginWithPhone = useCallback(async (phone: string, code: string) => {
+    const res = await fetch('/api/auth/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, code }),
+      credentials: 'include',
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || '验证码登录失败');
+
     if (data.access_token) {
       localStorage.setItem(TOKEN_KEY, data.access_token);
       setToken(data.access_token);
@@ -115,7 +135,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || '注册失败');
 
-    // Store token in localStorage for cross-origin iframe support
     if (data.access_token) {
       localStorage.setItem(TOKEN_KEY, data.access_token);
       setToken(data.access_token);
@@ -151,8 +170,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(() => ({
-    user, profile, loading, token, refreshProfile, login, register, logout, updateCredits,
-  }), [user, profile, loading, token, refreshProfile, login, register, logout, updateCredits]);
+    user, profile, loading, token, refreshProfile, login, loginWithPhone, register, logout, updateCredits,
+  }), [user, profile, loading, token, refreshProfile, login, loginWithPhone, register, logout, updateCredits]);
 
   return (
     <AuthContext.Provider value={value}>

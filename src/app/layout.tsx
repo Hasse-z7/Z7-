@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/auth-context';
+import { SupabaseConfigProvider } from '@/lib/supabase-config-inject';
 import Navbar from '@/components/navbar';
 import Footer from '@/components/footer';
 
@@ -19,13 +20,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="zh-CN" suppressHydrationWarning>
       <body className="min-h-screen bg-background antialiased">
         <ThemeProvider>
-          <AuthProvider>
-            <div className="relative flex min-h-screen flex-col">
-              <Navbar />
-              <main className="flex-1">{children}</main>
-              <Footer />
-            </div>
-          </AuthProvider>
+          <SupabaseConfigProvider>
+            <AuthProvider>
+              <div className="relative flex min-h-screen flex-col">
+                <Navbar />
+                <main className="flex-1">{children}</main>
+                <Footer />
+              </div>
+            </AuthProvider>
+          </SupabaseConfigProvider>
         </ThemeProvider>
       </body>
     </html>

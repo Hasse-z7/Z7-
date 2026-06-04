@@ -24,8 +24,9 @@
 │   │   ├── page.tsx        # 首页
 │   │   ├── layout.tsx      # 全局Layout
 │   │   ├── globals.css     # 全局样式
-│   │   ├── login/          # 登录页
-│   │   ├── register/       # 注册页
+│   │   ├── login/          # 登录页（手机验证码+邮箱密码Tab切换）
+│   │   ├── register/       # 注册页（邮箱密码注册）
+│   │   ├── forgot-password/ # 找回密码页
 │   │   ├── dashboard/      # 个人中心
 │   │   ├── recharge/       # 充值中心
 │   │   ├── create/         # AI创作页
@@ -37,7 +38,7 @@
 │   │   ├── membership/     # 会员权益
 │   │   ├── admin/          # 管理后台
 │   │   └── api/            # API路由
-│   │       ├── auth/       # 认证API (login/register/profile)
+│   │       ├── auth/       # 认证API (login/register/profile/send-otp/verify-otp/reset-password)
 │   │       ├── recharge/   # 充值API (packages/create-order/verify-order)
 │   │       ├── ai/         # AI创作API (image/video/music)
 │   │       │   └── video/ # 视频异步任务
@@ -60,10 +61,10 @@
 │   ├── lib/                # 工具库
 │   │   ├── coze-api.ts     # Coze AI API封装(生图/音乐)
 │   │   ├── ark-config.ts   # 方舟配置(Key池+熔断器)
-│   │   ├── ark-client.ts   # 方舟API客户端(视频生成)
 │   │   ├── credits-helpers.ts # 算力管理(扣除/退还/记录)
 │   │   ├── auth-helpers.ts # 认证辅助函数
-│   │   ├── supabase-browser.ts # Supabase浏览器客户端
+│   │   ├── supabase-browser.ts # Supabase浏览器客户端(前端登录用)
+│   │   ├── supabase-config-inject.tsx # Supabase配置注入Provider
 │   │   └── utils.ts        # 通用工具
 │   ├── hooks/              # 自定义Hooks
 │   └── storage/            # Supabase存储层
@@ -97,9 +98,19 @@ pnpm ts-check          # TypeScript类型检查
 
 ## 认证方案
 
-- 后端：Supabase Auth（邮箱+密码），通过 `getSupabaseClient(token)` 验证
-- 前端：API路由认证，Cookie存储 `sb-access-token` 和 `sb-refresh-token`
+- 后端：Supabase Auth（邮箱+密码、手机号+验证码），通过 `getSupabaseClient(token)` 验证
+- 前端：API路由认证 + Supabase浏览器客户端（手机验证码登录用SDK直连）
+- 前端配置注入：`SupabaseConfigProvider` → `supabase-browser.ts`（通过 `/api/supabase-config` 获取凭证）
 - 辅助函数：`getAuthUser(request)` 统一从Cookie/Header获取用户
+- 登录方式：手机验证码（登录注册一体）+ 邮箱密码（独立注册页）+ 找回密码
+- API路由：
+  - `/api/auth/login` - 邮箱密码登录
+  - `/api/auth/register` - 邮箱注册
+  - `/api/auth/send-otp` - 发送手机验证码
+  - `/api/auth/verify-otp` - 验证手机验证码（登录注册一体）
+  - `/api/auth/reset-password` - 找回密码（发送重置邮件）
+  - `/api/auth/profile` - 获取用户信息
+  - `/api/supabase-config` - 前端获取Supabase凭证
 
 ## AI创作算力消耗
 
