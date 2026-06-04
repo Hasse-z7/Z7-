@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { REGISTER_BONUS } from '@/lib/credits-helpers';
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,14 +31,14 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
 
       if (!existingProfile) {
-        // 新用户：创建 profile 并赠送算力
+        // 新用户：创建 profile（无注册赠送）
         const phoneSuffix = cleanPhone.slice(-4);
         const nickname = `用户${phoneSuffix}`;
         await supabase.from('profiles').insert({
           user_id: userId,
           nickname,
-          credits: REGISTER_BONUS,
-          free_credits: REGISTER_BONUS,
+          credits: 0,
+          free_credits: 0,
           paid_credits: 0,
           vip_level: 'free',
           is_admin: false,
@@ -47,15 +46,6 @@ export async function POST(request: NextRequest) {
           daily_video_count: 0,
           daily_music_count: 0,
           daily_digital_count: 0,
-        });
-
-        await supabase.from('credits_transactions').insert({
-          user_id: userId,
-          amount: REGISTER_BONUS,
-          balance_after: REGISTER_BONUS,
-          type: 'register_bonus',
-          description: '新人注册赠送50算力点',
-          credits_type: 'free',
         });
       }
     }

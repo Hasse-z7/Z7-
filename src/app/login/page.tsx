@@ -227,7 +227,7 @@ export default function LoginPage() {
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                验证码登录即自动注册，新用户赠送50算力点
+                验证码登录即自动注册，开始您的AI创作之旅
               </p>
             </form>
           )}

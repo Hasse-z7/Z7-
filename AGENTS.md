@@ -132,8 +132,8 @@ pnpm ts-check          # TypeScript类型检查
 
 - 单位：算力点，1元=10算力点
 - 永久有效，不清零
-- 新用户注册赠送50算力点（写入 free_credits）
-- 每日登录赠送5算力点（跨天首次访问自动发放，写入 free_credits）
+- 新用户注册赠送已取消
+- 每日登录赠送已取消
 - 充值到账写入 paid_credits
 - 优先消耗免费算力(free_credits)，再消耗付费算力(paid_credits)
 

@@ -16,8 +16,8 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export const CREDITS_PER_IMAGE = 2;   // 生图：2算力/张
 export const CREDITS_PER_SECOND = 3;  // 视频：3算力/秒
 export const CREDITS_PER_MUSIC = 10;  // 音乐：10算力/首
-export const REGISTER_BONUS = 50;      // 注册赠送
-export const DAILY_LOGIN_BONUS = 5;    // 每日登录赠送
+export const REGISTER_BONUS = 0;       // 注册赠送（已取消）
+export const DAILY_LOGIN_BONUS = 0;    // 每日登录赠送（已取消）
 
 // ==================== 类型定义 ====================
 

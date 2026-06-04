@@ -62,8 +62,7 @@ const COST_RULES = [
   { label: 'AI生图', value: '2算力点/张' },
   { label: 'AI视频', value: '3算力点/秒' },
   { label: 'AI音乐', value: '10算力点/首' },
-  { label: '新用户注册', value: '赠送50算力点' },
-  { label: '每日登录', value: '赠送5算力点' },
+  { label: '首充优惠', value: '充值即享额外赠送' },
 ];
 
 // 充值套餐推荐标签
@@ -351,14 +350,6 @@ export default function RechargePage() {
                       <span className="text-sm text-muted-foreground">算力点</span>
                     </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-3 text-sm">
-                  <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
-                    <Gift className="w-3 h-3 mr-1" /> 注册赠送50点
-                  </Badge>
-                  <Badge variant="outline" className="border-emerald-500/30 text-emerald-400">
-                    <LogIn className="w-3 h-3 mr-1" /> 每日登录+5点
-                  </Badge>
                 </div>
               </div>
               {/* 算力消耗说明 */}
