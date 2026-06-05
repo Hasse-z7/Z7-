@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
-  Bot, Download, Sparkles, Loader2, UserRound, MonitorSmartphone
+  Bot, Download, Sparkles, Loader2, MonitorSmartphone, Plus, FolderPlus
 } from 'lucide-react';
 
 interface AIModel {
@@ -29,6 +29,14 @@ interface Template {
   is_vip_only: boolean;
 }
 
+interface DigitalHumanWork {
+  id: string;
+  file_url: string;
+  prompt: string;
+  work_type: string;
+  created_at: string;
+}
+
 const avatars = [
   { id: 'news_anchor', name: '新闻主播', icon: '📺', desc: '专业新闻播报' },
   { id: 'teacher', name: '知识讲师', icon: '👨‍🏫', desc: '教学讲解' },
@@ -47,6 +55,13 @@ export default function CreateDigitalHumanPage() {
   const [loading, setLoading] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
+
+  // Project selection
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+
+  // History works
+  const [historyWorks, setHistoryWorks] = useState<DigitalHumanWork[]>([]);
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -76,7 +91,35 @@ export default function CreateDigitalHumanPage() {
     }
   }, []);
 
-  useEffect(() => { fetchTemplates(); fetchVoices(); }, [fetchTemplates, fetchVoices]);
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await fetch('/api/projects', { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (data.projects) {
+        setProjects(data.projects);
+        const saved = localStorage.getItem('selectedProjectId_digital_human');
+        if (saved && data.projects.some((p: { id: string }) => p.id === saved)) {
+          setSelectedProjectId(saved);
+        }
+      }
+    } catch (err) {
+      console.error('Fetch projects error:', err);
+    }
+  }, []);
+
+  const fetchExistingWorks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/works?type=digital_human', { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (data.works) {
+        setHistoryWorks(data.works);
+      }
+    } catch (err) {
+      console.error('Fetch existing works error:', err);
+    }
+  }, []);
+
+  useEffect(() => { fetchTemplates(); fetchVoices(); fetchProjects(); fetchExistingWorks(); }, [fetchTemplates, fetchVoices, fetchProjects, fetchExistingWorks]);
 
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
@@ -98,15 +141,18 @@ export default function CreateDigitalHumanPage() {
           avatar_style: selectedAvatar,
           voice_type: selectedVoice,
           orientation,
+          project_id: selectedProjectId || undefined,
         }),
       });
       const data = await res.json();
-      const resultUrl = data.audio_url || data.video_url || data.url;
-      if (resultUrl) {
-        setResultUrl(resultUrl);
+      const generatedUrl = data.audio_url || data.video_url || data.url;
+      if (generatedUrl) {
+        setResultUrl(generatedUrl);
         if (data.remaining_credits !== undefined) {
           updateCredits(data.remaining_credits);
         }
+        // Refresh history
+        fetchExistingWorks();
       } else {
         alert(data.error || '生成失败');
       }
@@ -114,6 +160,26 @@ export default function CreateDigitalHumanPage() {
       alert('生成失败，请重试');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    const now = new Date();
+    const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}数字人项目`;
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ name: dateName }),
+      });
+      const data = await res.json();
+      if (data.project) {
+        setSelectedProjectId(data.project.id);
+        localStorage.setItem('selectedProjectId_digital_human', data.project.id);
+        fetchProjects();
+      }
+    } catch (e) {
+      console.error('创建项目失败:', e);
     }
   };
 
@@ -127,8 +193,37 @@ export default function CreateDigitalHumanPage() {
           <p className="text-muted-foreground mt-2">文字生成数字人播报视频，多形象多音色可选</p>
         </div>
 
+        {/* 未创建项目时显示新建项目引导 */}
+        {!selectedProjectId ? (
+          <Card className="border-border/50 bg-card/50 backdrop-blur">
+            <CardContent className="py-16 flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center mb-6">
+                <Plus className="w-10 h-10 text-amber-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
+              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI数字人创作，所有生成的作品将保存在项目中</p>
+              <Button
+                onClick={handleCreateProject}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-8 py-3 text-base"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                新建数字人项目
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            {/* Project bar */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FolderPlus className="w-4 h-4" />
+              <span>当前项目：{projects.find(p => p.id === selectedProjectId)?.name || '未命名'}</span>
+              <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={() => {
+                setSelectedProjectId('');
+                localStorage.removeItem('selectedProjectId_digital_human');
+              }}>切换项目</Button>
+            </div>
+
             {/* Avatar Selection */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
@@ -231,7 +326,7 @@ export default function CreateDigitalHumanPage() {
               </CardContent>
             </Card>
 
-            {/* Result */}
+            {/* Current Result */}
             {resultUrl && (
               <Card className="border-border/50">
                 <CardHeader className="pb-3"><CardTitle className="text-base">生成结果</CardTitle></CardHeader>
@@ -240,6 +335,34 @@ export default function CreateDigitalHumanPage() {
                   <Button variant="outline" className="w-full mt-4" onClick={() => window.open(resultUrl, '_blank')}>
                     <Download className="w-4 h-4 mr-2" /> 下载视频
                   </Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* History Works */}
+            {historyWorks.length > 0 && (
+              <Card className="border-border/50">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">历史作品</CardTitle>
+                  <CardDescription>之前生成的数字人作品</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  {historyWorks.map((work) => (
+                    <div key={work.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors">
+                      <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500/50 to-orange-500/50 flex items-center justify-center shrink-0">
+                        <Bot className="w-5 h-5 text-white" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{work.prompt || '无描述'}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(work.created_at).toLocaleString()}</p>
+                      </div>
+                      {work.file_url && (
+                        <Button variant="ghost" size="sm" onClick={() => window.open(work.file_url, '_blank')}>
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
                 </CardContent>
               </Card>
             )}
@@ -267,6 +390,7 @@ export default function CreateDigitalHumanPage() {
             ))}
           </div>
         </div>
+        )}
       </div>
     </div>
   );

@@ -130,7 +130,7 @@ export default function CreateVideoPage() {
       const data = await res.json();
       if (data.projects) {
         setProjects(data.projects);
-        const saved = localStorage.getItem('selected_project_id');
+        const saved = localStorage.getItem('selectedProjectId_video');
         if (saved && data.projects.some((p: { id: string }) => p.id === saved)) {
           setSelectedProjectId(saved);
         }
@@ -140,7 +140,42 @@ export default function CreateVideoPage() {
     }
   }, []);
 
-  useEffect(() => { fetchTemplates(); fetchModels(); fetchProjects(); }, [fetchTemplates, fetchModels, fetchProjects]);
+  // Load existing video works from database on mount
+  const fetchExistingWorks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/works?type=video', { headers: getAuthHeaders() });
+      const data = await res.json();
+      if (data.works && data.works.length > 0) {
+        const existingTasks: VideoTask[] = data.works.map((w: Record<string, string>) => ({
+          id: w.id || crypto.randomUUID(),
+          taskId: '',
+          prompt: w.prompt || '',
+          status: 'succeeded' as const,
+          statusText: '已完成',
+          resultUrl: w.file_url || '',
+          error: '',
+          editingPrompt: '',
+          isEditing: false,
+          createdAt: new Date(w.created_at || Date.now()).getTime(),
+        }));
+        setTasks(prev => {
+          // Merge: keep in-memory tasks that aren't already loaded
+          const existingIds = new Set(existingTasks.map(t => t.id));
+          const memoryOnly = prev.filter(t => !existingIds.has(t.id));
+          return [...memoryOnly, ...existingTasks];
+        });
+      }
+    } catch (err) {
+      console.error('Fetch existing works error:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTemplates();
+    fetchModels();
+    fetchProjects();
+    fetchExistingWorks();
+  }, [fetchTemplates, fetchModels, fetchProjects, fetchExistingWorks]);
 
   // Cleanup polling intervals on unmount
   useEffect(() => {
@@ -193,7 +228,7 @@ export default function CreateVideoPage() {
         fetchProjects();
         if (data.project_id) {
           setSelectedProjectId(data.project_id);
-          localStorage.setItem('selected_project_id', data.project_id);
+          localStorage.setItem('selectedProjectId_video', data.project_id);
         }
         setShowSaveDialog(false);
         if (pendingNavigation) {
@@ -557,6 +592,43 @@ export default function CreateVideoPage() {
           <p className="text-muted-foreground mt-2">文字或图片生成视频，支持多种视频创作模式</p>
         </div>
 
+        {/* 未选择项目时显示新建项目引导 */}
+        {!selectedProjectId ? (
+          <Card className="border-border/50 bg-card/50 backdrop-blur">
+            <CardContent className="py-16 flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-500/20 flex items-center justify-center mb-6">
+                <Plus className="w-10 h-10 text-cyan-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
+              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI视频创作，所有生成的作品将保存在项目中</p>
+              <Button
+                onClick={async () => {
+                  const now = new Date();
+                  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}视频项目`;
+                  try {
+                    const res = await fetch('/api/projects', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                      body: JSON.stringify({ name: dateName }),
+                    });
+                    const data = await res.json();
+                    if (data.project) {
+                      setSelectedProjectId(data.project.id);
+                      localStorage.setItem('selectedProjectId_video', data.project.id);
+                      fetchProjects();
+                    }
+                  } catch (e) {
+                    console.error('创建项目失败:', e);
+                  }
+                }}
+                className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white px-8 py-3 text-base"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                新建视频项目
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
             <Card className="border-border/50">
@@ -1097,6 +1169,7 @@ export default function CreateVideoPage() {
             ))}
           </div>
         </div>
+        )}
 
         {/* 未保存作品提示栏 */}
         {hasUnsavedWork && !showSaveDialog && (
