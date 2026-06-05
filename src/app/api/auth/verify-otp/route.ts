@@ -6,7 +6,8 @@ async function isFeatureOpen(key: string): Promise<boolean> {
   try {
     const supabase = getSupabaseClient();
     const { data } = await supabase.from('system_config').select('value').eq('key', key).single();
-    return data?.value === 'true';
+    const v = data?.value;
+    return v === true || v === 'true';
   } catch {
     return true;
   }
