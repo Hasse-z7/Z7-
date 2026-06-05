@@ -63,45 +63,30 @@ export default function HomePage() {
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-violet-500/5 rounded-full blur-[150px]" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24">
-          <div className="text-center space-y-6">
-            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-sm font-medium">
-              <Sparkles className="w-4 h-4" />
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+          <div className="text-center space-y-3">
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-medium">
+              <Sparkles className="w-3.5 h-3.5" />
               AI驱动的多媒体创作平台
             </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight">
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold tracking-tight">
               <span className="bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent">
                 用AI释放创造力
               </span>
             </h1>
-            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-sm sm:text-base text-muted-foreground max-w-xl mx-auto">
               一站式AI生图、视频生成、音乐制作，让你的想象变为现实
             </p>
 
-            <div className="flex items-center justify-center gap-4 pt-4">
-              {user ? (
-                <Button
-                  size="lg"
-                  className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium px-8"
-                  onClick={() => router.push('/dashboard')}
-                >
-                  进入工作台 <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              ) : (
-                <>
-                  <Link href="/login">
-                    <Button size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium px-8">
-                      登录 / 注册
-                    </Button>
-                  </Link>
-                  <Link href="/dashboard">
-                    <Button size="lg" variant="outline" className="px-8 border-border/50">
-                      浏览功能
-                    </Button>
-                  </Link>
-                </>
-              )}
-            </div>
+            {!user && (
+              <div className="flex items-center justify-center gap-4 pt-2">
+                <Link href="/login">
+                  <Button size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium px-8">
+                    登录 / 注册
+                  </Button>
+                </Link>
+              </div>
+            )}
 
             {user && profile && (
               <div className="flex items-center justify-center gap-6 pt-4">

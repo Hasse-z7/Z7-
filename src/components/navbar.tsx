@@ -38,7 +38,6 @@ export default function Navbar() {
   ];
 
   const projectLinks = [
-    { href: '/projects', label: '项目管理', icon: FolderOpen },
     { href: '/history', label: '历史记录', icon: History },
     { href: '/trash', label: '回收站', icon: Trash2 },
   ];
