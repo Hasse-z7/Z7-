@@ -22,9 +22,9 @@ function getConfig() {
   return {
     appId: process.env.ALIPAY_APP_ID || '',
     privateKey: (process.env.ALIPAY_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim(),
-    alipayPublicKey: (process.env.ALIPAY_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim(),
+    alipayPublicKey: (process.env.ALIPAY_ALIPAY_PUBLIC_KEY || '').replace(/\\n/g, '\n').trim(),
     notifyUrl: process.env.ALIPAY_NOTIFY_URL || '',
-    gateway: 'https://openapi.alipay.com/gateway.do',
+    gateway: process.env.ALIPAY_GATEWAY || 'https://openapi.alipay.com/gateway.do',
     charset: 'utf-8',
     signType: 'RSA2',
     version: '1.0',
