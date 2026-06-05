@@ -201,6 +201,21 @@ export async function POST(request: NextRequest) {
         project_id: resolvedProjectId,
       }).select('id').maybeSingle();
       workId = insertedWork?.id || null;
+
+      // 自动更新项目封面：用第一张生成的图片作为项目封面
+      if (resolvedProjectId && generatedUrls[0]) {
+        const { data: existingProject } = await supabase
+          .from('projects')
+          .select('cover_url')
+          .eq('id', resolvedProjectId)
+          .maybeSingle();
+        if (!existingProject?.cover_url) {
+          await supabase
+            .from('projects')
+            .update({ cover_url: generatedUrls[0] })
+            .eq('id', resolvedProjectId);
+        }
+      }
     }
 
     // 获取用户当前总算力

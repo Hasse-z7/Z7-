@@ -167,14 +167,37 @@ async function processTask(taskId: string): Promise<void> {
       });
 
       // 保存到用户作品（关联项目的project_id）
+      // 使用首帧图作为视频缩略图
+      let thumbnailUrl: string | null = null;
+      if (task.reference_images && Array.isArray(task.reference_images) && task.reference_images.length > 0) {
+        const firstRef = task.reference_images[0];
+        thumbnailUrl = typeof firstRef === 'string' ? firstRef : (firstRef as { url: string }).url;
+      }
+
       await supabase.from('user_works').insert({
         user_id: task.user_id,
         work_type: 'video',
         file_url: videoUrl,
+        thumbnail_url: thumbnailUrl,
         prompt: task.prompt || '',
         credits_cost: task.credits_cost,
         project_id: task.project_id || null,
       });
+
+      // 自动更新项目封面：用视频首帧图作为项目封面（仅当项目没有封面时）
+      if (task.project_id && thumbnailUrl) {
+        const { data: existingProject } = await supabase
+          .from('projects')
+          .select('cover_url')
+          .eq('id', task.project_id)
+          .maybeSingle();
+        if (!existingProject?.cover_url) {
+          await supabase
+            .from('projects')
+            .update({ cover_url: thumbnailUrl })
+            .eq('id', task.project_id);
+        }
+      }
 
       console.info(`[VideoWorker] 任务成功 ${taskId.slice(0, 8)}: 视频=${videoUrl.slice(0, 60)}...`);
 

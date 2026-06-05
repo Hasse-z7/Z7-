@@ -21,10 +21,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    // 获取每个项目的作品数量和首个作品（用于默认封面）
+    // 获取每个项目的作品数量和首个图片作品（用于默认封面）
     const { data: worksCounts, error: countError } = await supabase
       .from('user_works')
-      .select('project_id, work_type, file_url')
+      .select('project_id, work_type, file_url, thumbnail_url')
       .eq('user_id', authResult.user.id)
       .is('deleted_at', null)
       .order('created_at', { ascending: true });
@@ -33,16 +33,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: countError.message }, { status: 500 });
     }
 
-    // 统计每个项目的图片/视频数量，并取第一个作品作为默认封面
-    const countMap: Record<string, { images: number; videos: number; firstWorkUrl: string | null }> = {};
+    const countMap: Record<string, { images: number; videos: number; firstImageUrl: string | null }> = {};
     for (const w of worksCounts || []) {
       if (!w.project_id) continue;
-      if (!countMap[w.project_id]) countMap[w.project_id] = { images: 0, videos: 0, firstWorkUrl: null };
+      if (!countMap[w.project_id]) countMap[w.project_id] = { images: 0, videos: 0, firstImageUrl: null };
       if (w.work_type === 'image') countMap[w.project_id].images++;
       if (w.work_type === 'video') countMap[w.project_id].videos++;
-      // 取第一个作品的file_url作为默认封面
-      if (!countMap[w.project_id].firstWorkUrl && w.file_url) {
-        countMap[w.project_id].firstWorkUrl = w.file_url;
+      // 优先使用图片作品作为封面（视频file_url是视频不是图片）
+      if (!countMap[w.project_id].firstImageUrl) {
+        if (w.work_type === 'image' && w.file_url) {
+          countMap[w.project_id].firstImageUrl = w.file_url;
+        } else if (w.work_type === 'video' && w.thumbnail_url) {
+          countMap[w.project_id].firstImageUrl = w.thumbnail_url;
+        }
       }
     }
 
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
       ...p,
       image_count: countMap[p.id]?.images || 0,
       video_count: countMap[p.id]?.videos || 0,
-      default_cover: countMap[p.id]?.firstWorkUrl || null,
+      default_cover: countMap[p.id]?.firstImageUrl || null,
     }));
 
     return NextResponse.json({ projects: enriched });
