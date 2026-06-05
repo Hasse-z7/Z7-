@@ -32,6 +32,7 @@ interface AIModel {
   description: string;
   platform?: string;
   is_free?: boolean;
+  credits_cost?: number;
 }
 
 interface VideoTask {
@@ -459,8 +460,9 @@ export default function CreateVideoPage() {
     const activePrompt = overridePrompt || prompt;
     if (!activePrompt.trim()) return;
 
-    // 3算力点/秒 × 时长
-    const cost = 3 * duration;
+    // 模型独立定价 × 时长
+    const modelCost = models.find(m => m.endpoint_id === selectedModelEndpoint)?.credits_cost || 3;
+    const cost = modelCost * duration;
     if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
 
     // Create local task entry
@@ -898,7 +900,11 @@ export default function CreateVideoPage() {
 
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
-                    消耗 <span className="text-cyan-400 font-bold">{3 * duration}</span> 算力点（3点/秒×{duration}秒）
+                    {(() => {
+                      const m = models.find(m => m.endpoint_id === selectedModelEndpoint);
+                      const costPerSec = m?.credits_cost || 3;
+                      return <>消耗 <span className="text-cyan-400 font-bold">{costPerSec * duration}</span> 算力点（{costPerSec}点/秒×{duration}秒）</>;
+                    })()}
                   </div>
                   {activeCount > 0 && (
                     <div className="text-sm text-amber-400 flex items-center gap-1">
@@ -1094,7 +1100,7 @@ export default function CreateVideoPage() {
                     )}
                     {models.map((m) => (
                       <option key={m.endpoint_id} value={m.endpoint_id}>
-                        {m.name}{m.is_free ? ((profile?.free_credits ?? 0) > 0 ? ' [免费]' : ' [免费额度已用完]') : ' [VIP]'}
+                        {m.name} [{m.credits_cost || 3}算力/秒]{m.is_free ? ((profile?.free_credits ?? 0) > 0 ? ' [免费]' : ' [免费额度已用完]') : ''}
                       </option>
                     ))}
                   </select>

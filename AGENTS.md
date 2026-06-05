@@ -114,18 +114,25 @@ pnpm ts-check          # TypeScript类型检查
 
 ## AI创作算力消耗
 
-| 功能 | 算力消耗 | 说明 |
-|------|---------|------|
-| AI生图 | 2算力点/张 | 按生成张数计费，模型由前端下拉选择 |
-| AI视频 | 3算力点/秒 | 按视频时长计费，模型由前端下拉选择 |
-| AI音乐 | 10算力点/首 | 固定消耗 |
+定价方式：**按模型独立定价**，每个模型的 `credits_cost` 存在数据库 `ai_models` 表。
+
+| 功能 | 定价方式 | 默认兜底 |
+|------|---------|---------|
+| AI生图 | 按模型 `credits_cost` 算力/张 | 2算力/张 |
+| AI视频 | 按模型 `credits_cost` 算力/秒 | 3算力/秒 |
+| AI音乐 | 10算力/首（固定） | - |
+
+图片模型定价区间：1~20算力/张（Seedream 1算力 → Midjourney极速 20算力）
+视频模型定价区间：1~30算力/秒（Seedance 1算力/秒 → Sora 2 Pro 30算力/秒）
+所有模型定价目标利润率：30%~80%
 
 ## AI模型管理
 
-- 数据库表：`ai_models`（name, endpoint_id, category, is_active, sort_order, description）
-- 管理后台：`/admin` 模型Tab页，支持CRUD操作
-- 前端生图/生视频页面自动加载对应category的模型列表，用户下拉选择
-- 模型Endpoint ID透传到后端，后端校验数据库中模型是否存在且active
+- 数据库表：`ai_models`（name, endpoint_id, category, is_active, sort_order, description, credits_cost）
+- `credits_cost`：模型独立算力定价，NULL时使用默认值（图片2/张，视频3/秒）
+- 管理后台：`/admin` 模型Tab页，支持CRUD操作（含credits_cost定价）
+- 前端生图/生视频页面自动加载对应category的模型列表，下拉显示算力消耗
+- 模型Endpoint ID透传到后端，后端校验数据库中模型是否存在且active，并读取credits_cost计费
 - 默认模型：视频=Seedance 1.5 Pro (doubao-seedance-1-5-pro-251215)，图片=Seedream 5.0 (doubao-seedream-5-0-260128)
 - 图片模型：Seedream 5.0（平台 integration.coze.cn 端点，doubao-seed 系列在该端点不可用）
 - 视频模型：Seedance 1.5 Pro（平台 integration.coze.cn 端点）

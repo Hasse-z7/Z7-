@@ -32,6 +32,7 @@ interface AIModel {
   description: string;
   platform?: string;
   is_free?: boolean;
+  credits_cost?: number;
 }
 
 interface ImageTask {
@@ -570,7 +571,11 @@ export default function CreateImagePage() {
 
                 <div className="flex items-center justify-between">
                   <div className="text-sm text-muted-foreground">
-                    消耗 <span className="text-cyan-400 font-bold">2</span> 算力点/张
+                    {selectedModelEndpoint ? (() => {
+                      const m = models.find(m => m.endpoint_id === selectedModelEndpoint);
+                      const cost = m?.credits_cost || 2;
+                      return <>消耗 <span className="text-cyan-400 font-bold">{cost}</span> 算力点/张</>;
+                    })() : <>消耗 <span className="text-cyan-400 font-bold">2</span> 算力点/张</>}
                   </div>
                   {generatingCount > 0 && (
                     <div className="text-sm text-amber-400 flex items-center gap-1">
@@ -767,7 +772,7 @@ export default function CreateImagePage() {
                     )}
                     {models.map((m) => (
                       <option key={m.endpoint_id} value={m.endpoint_id}>
-                        {m.name}{m.is_free ? ' [免费]' : ' [VIP]'}
+                        {m.name} [{m.credits_cost || 2}算力/张]{m.is_free ? ' [免费]' : ''}
                       </option>
                     ))}
                   </select>

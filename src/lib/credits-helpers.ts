@@ -13,9 +13,14 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ==================== 算力消耗常量 ====================
 
-export const CREDITS_PER_IMAGE = 2;   // 生图：2算力/张
-export const CREDITS_PER_SECOND = 3;  // 视频：3算力/秒
-export const CREDITS_PER_MUSIC = 10;  // 音乐：10算力/首
+// 默认兜底值（当数据库模型未配置credits_cost时使用）
+export const DEFAULT_CREDITS_PER_IMAGE = 2;   // 生图默认：2算力/张
+export const DEFAULT_CREDITS_PER_SECOND = 3;  // 视频默认：3算力/秒
+export const CREDITS_PER_MUSIC = 10;           // 音乐：10算力/首（固定）
+
+// 旧常量保留向后兼容
+export const CREDITS_PER_IMAGE = DEFAULT_CREDITS_PER_IMAGE;
+export const CREDITS_PER_SECOND = DEFAULT_CREDITS_PER_SECOND;
 export const REGISTER_BONUS = 0;       // 注册赠送（已取消）
 export const DAILY_LOGIN_BONUS = 0;    // 每日登录赠送（已取消）
 

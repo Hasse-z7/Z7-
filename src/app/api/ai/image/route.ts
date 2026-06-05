@@ -3,7 +3,7 @@ import { getAuthUser } from '@/lib/auth-helpers';
 import { generateImage } from '@/lib/coze-api';
 import { generateImageViaDmxapi, generateImageViaMj, isDmxapiModel } from '@/lib/dmxapi-client';
 import { HeaderUtils } from 'coze-coding-dev-sdk';
-import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
+import { deductCredits, refundCredits, recordTransaction, DEFAULT_CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
 import { acquireAISlot, releaseSlot } from '@/lib/rate-limiter';
 
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
     const adminClient = getSupabaseClient();
     const { data: modelData, error: modelError } = await adminClient
       .from('ai_models')
-      .select('endpoint_id, name, platform, is_free')
+      .select('endpoint_id, name, platform, is_free, credits_cost')
       .eq('endpoint_id', model_endpoint)
       .eq('category', 'image')
       .eq('is_active', true)
@@ -71,6 +71,7 @@ export async function POST(request: NextRequest) {
 
     const modelPlatform = modelData.platform || 'coze';
     const isFreeModel = modelData.is_free === true;
+    const creditsPerImage = modelData.credits_cost || DEFAULT_CREDITS_PER_IMAGE; // 模型独立定价
 
     const { supabase } = authResult;
 
@@ -84,9 +85,9 @@ export async function POST(request: NextRequest) {
     // 免费模型：仅当用户有免费额度时才免费，否则正常扣费
     const actuallyFree = isFreeModel && userFreeCredits > 0;
 
-    // 计算算力消耗
+    // 计算算力消耗（使用模型独立定价）
     const count = imageCount || 1;
-    const creditsCost = actuallyFree ? 0 : CREDITS_PER_IMAGE * count;
+    const creditsCost = actuallyFree ? 0 : creditsPerImage * count;
 
     // ========== 1. 扣算力（免费跳过） ==========
     let deduction: Awaited<ReturnType<typeof deductCredits>> | null = null;
