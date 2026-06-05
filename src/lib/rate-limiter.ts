@@ -1,13 +1,19 @@
 /**
  * AI 请求并发控制和速率限制
  *
- * 目标：支持100人同时使用AI功能
+ * 目标：支持20-30人同时使用AI功能（方案A：3 DMXAPI Key）
+ * 容量规划：
+ *   - Coze平台(1 Key): ~5 QPS → ~300 RPM
+ *   - DMXAPI(3 Keys):  ~15 QPS → ~900 RPM
+ *   - 合计吞吐: ~20 QPS → ~1200 RPM
+ *
  * 策略：
  *   1. 并发槽位控制 - 限制同时在处理的AI请求数
  *   2. 速率限制 - 每分钟请求数上限
  *   3. 排队机制 - 超出并发限制的请求进入队列
- *   4. 多KEY轮转 - dmxapi.cn支持多KEY提高吞吐
+ *   4. 多KEY轮转 - dmxapi.cn支持多KEY提高吞吐（3 Key轮转负载均衡）
  *   5. 优先级 - VIP用户优先处理
+ *   6. 熔断保护 - 方舟API失败率超30%暂停接收，60秒后半开
  */
 
 // ==================== 并发槽位控制 ====================
@@ -20,8 +26,8 @@ interface ConcurrencySlot {
 }
 
 const activeSlots: ConcurrencySlot[] = [];
-const MAX_CONCURRENT = 50; // 最大并发AI请求数
-const SLOT_TIMEOUT_MS = 5 * 60 * 1000; // 5分钟超时自动释放
+const MAX_CONCURRENT = 30; // 最大并发AI请求数（匹配3 DMXAPI Key + 1 Coze Key的吞吐上限）
+const SLOT_TIMEOUT_MS = 3 * 60 * 1000; // 3分钟超时自动释放（图片/音乐通常10-30s，视频异步不入槽）
 
 // ==================== 速率限制 ====================
 
@@ -31,7 +37,7 @@ interface RateLimitEntry {
 
 const rateLimitMap = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1分钟窗口
-const RATE_LIMIT_MAX_REQUESTS = 100; // 每分钟最大100个AI请求（全局）
+const RATE_LIMIT_MAX_REQUESTS = 200; // 每分钟最大200个AI请求（3 DMXAPI Key × ~60 RPM + Coze ~20 RPM）
 
 // ==================== 排队系统 ====================
 
@@ -46,7 +52,7 @@ interface QueueItem {
 }
 
 const requestQueue: QueueItem[] = [];
-const QUEUE_TIMEOUT_MS = 2 * 60 * 1000; // 排队2分钟超时
+const QUEUE_TIMEOUT_MS = 90 * 1000; // 排队90秒超时（3 Key场景下排队时间大幅缩短）
 
 // ==================== 多KEY轮转（dmxapi.cn）====================
 
@@ -248,7 +254,7 @@ function checkRateLimit(): boolean {
  */
 export function checkUserRateLimit(userId: string): { allowed: boolean; remaining: number } {
   const now = Date.now();
-  const USER_RATE_LIMIT = 20; // 每个用户每分钟20次AI请求
+  const USER_RATE_LIMIT = 15; // 每个用户每分钟15次AI请求（防止单用户占满并发）
   const entry = rateLimitMap.get(`user_${userId}`) || { timestamps: [] };
 
   entry.timestamps = entry.timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
