@@ -177,6 +177,19 @@ export default function CreateDigitalHumanPage() {
         setSelectedProjectId(data.project.id);
         localStorage.setItem('selectedProjectId', data.project.id);
         fetchProjects();
+      } else if (res.status === 409) {
+        await fetchProjects();
+        const projRes = await fetch('/api/projects', { headers: getAuthHeaders() });
+        if (projRes.ok) {
+          const projData = await projRes.json();
+          const existing = projData.projects?.find((p: { name: string }) => p.name === dateName);
+          if (existing) {
+            setSelectedProjectId(existing.id);
+            localStorage.setItem('selectedProjectId', existing.id);
+          }
+        }
+      } else {
+        console.error('创建项目失败:', data.error);
       }
     } catch (e) {
       console.error('创建项目失败:', e);
@@ -318,7 +331,7 @@ export default function CreateDigitalHumanPage() {
                 <Button
                   className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-medium"
                   onClick={handleGenerate}
-                  disabled={loading || !prompt.trim()}
+                  disabled={loading || typeof prompt !== 'string' || !prompt.trim()}
                 >
                   {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
                   {loading ? '生成中...' : '开始生成数字人视频'}

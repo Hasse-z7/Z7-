@@ -11,7 +11,11 @@ export function usePersistedState<T>(key: string, defaultValue: T): [T, React.Di
     if (typeof window === 'undefined') return defaultValue;
     try {
       const stored = localStorage.getItem(key);
-      return stored ? JSON.parse(stored) : defaultValue;
+      if (stored === null) return defaultValue;
+      const parsed = JSON.parse(stored);
+      // Ensure parsed value matches the expected type
+      if (typeof parsed !== typeof defaultValue) return defaultValue;
+      return parsed;
     } catch {
       return defaultValue;
     }

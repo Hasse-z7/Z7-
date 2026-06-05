@@ -616,6 +616,19 @@ export default function CreateVideoPage() {
                       setSelectedProjectId(data.project.id);
                       localStorage.setItem('selectedProjectId', data.project.id);
                       fetchProjects();
+                    } else if (res.status === 409) {
+                      await fetchProjects();
+                      const projRes = await fetch('/api/projects', { headers: getAuthHeaders() });
+                      if (projRes.ok) {
+                        const projData = await projRes.json();
+                        const existing = projData.projects?.find((p: { name: string }) => p.name === dateName);
+                        if (existing) {
+                          setSelectedProjectId(existing.id);
+                          localStorage.setItem('selectedProjectId', existing.id);
+                        }
+                      }
+                    } else {
+                      console.error('创建项目失败:', data.error);
                     }
                   } catch (e) {
                     console.error('创建项目失败:', e);
@@ -846,7 +859,7 @@ export default function CreateVideoPage() {
                 <Button
                   className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium"
                   onClick={() => handleGenerate()}
-                  disabled={!prompt.trim()}
+                  disabled={typeof prompt !== 'string' || !prompt.trim()}
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
                   开始生成视频
