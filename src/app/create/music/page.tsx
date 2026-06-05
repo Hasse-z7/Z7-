@@ -72,7 +72,7 @@ export default function CreateMusicPage() {
       const data = await res.json();
       if (data.projects) {
         setProjects(data.projects);
-        const saved = localStorage.getItem('selectedProjectId_music');
+        const saved = localStorage.getItem('selectedProjectId');
         if (saved && data.projects.some((p: { id: string }) => p.id === saved)) {
           setSelectedProjectId(saved);
         }
@@ -139,7 +139,7 @@ export default function CreateMusicPage() {
 
   const handleCreateProject = async () => {
     const now = new Date();
-    const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}音乐项目`;
+    const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}项目`;
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
@@ -149,7 +149,7 @@ export default function CreateMusicPage() {
       const data = await res.json();
       if (data.project) {
         setSelectedProjectId(data.project.id);
-        localStorage.setItem('selectedProjectId_music', data.project.id);
+        localStorage.setItem('selectedProjectId', data.project.id);
         fetchProjects();
       }
     } catch (e) {
@@ -175,13 +175,13 @@ export default function CreateMusicPage() {
                 <Plus className="w-10 h-10 text-rose-400" />
               </div>
               <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
-              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI音乐创作，所有生成的作品将保存在项目中</p>
+              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI创作，所有生成的作品将保存在项目中</p>
               <Button
                 onClick={handleCreateProject}
                 className="bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white px-8 py-3 text-base"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                新建音乐项目
+                新建项目
               </Button>
             </CardContent>
           </Card>
@@ -194,7 +194,7 @@ export default function CreateMusicPage() {
               <span>当前项目：{projects.find(p => p.id === selectedProjectId)?.name || '未命名'}</span>
               <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={() => {
                 setSelectedProjectId('');
-                localStorage.removeItem('selectedProjectId_music');
+                localStorage.removeItem('selectedProjectId');
               }}>切换项目</Button>
             </div>
 

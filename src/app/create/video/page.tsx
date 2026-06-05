@@ -130,7 +130,7 @@ export default function CreateVideoPage() {
       const data = await res.json();
       if (data.projects) {
         setProjects(data.projects);
-        const saved = localStorage.getItem('selectedProjectId_video');
+        const saved = localStorage.getItem('selectedProjectId');
         if (saved && data.projects.some((p: { id: string }) => p.id === saved)) {
           setSelectedProjectId(saved);
         }
@@ -228,7 +228,7 @@ export default function CreateVideoPage() {
         fetchProjects();
         if (data.project_id) {
           setSelectedProjectId(data.project_id);
-          localStorage.setItem('selectedProjectId_video', data.project_id);
+          localStorage.setItem('selectedProjectId', data.project_id);
         }
         setShowSaveDialog(false);
         if (pendingNavigation) {
@@ -600,11 +600,11 @@ export default function CreateVideoPage() {
                 <Plus className="w-10 h-10 text-cyan-400" />
               </div>
               <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
-              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI视频创作，所有生成的作品将保存在项目中</p>
+              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI创作，所有生成的作品将保存在项目中</p>
               <Button
                 onClick={async () => {
                   const now = new Date();
-                  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}视频项目`;
+                  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}项目`;
                   try {
                     const res = await fetch('/api/projects', {
                       method: 'POST',
@@ -614,7 +614,7 @@ export default function CreateVideoPage() {
                     const data = await res.json();
                     if (data.project) {
                       setSelectedProjectId(data.project.id);
-                      localStorage.setItem('selectedProjectId_video', data.project.id);
+                      localStorage.setItem('selectedProjectId', data.project.id);
                       fetchProjects();
                     }
                   } catch (e) {
@@ -624,7 +624,7 @@ export default function CreateVideoPage() {
                 className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white px-8 py-3 text-base"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                新建视频项目
+                新建项目
               </Button>
             </CardContent>
           </Card>

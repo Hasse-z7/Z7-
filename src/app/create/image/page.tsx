@@ -172,7 +172,7 @@ export default function CreateImagePage() {
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
-        const saved = localStorage.getItem('selectedProjectId_image');
+        const saved = localStorage.getItem('selectedProjectId');
         if (saved) setSelectedProjectId(saved);
       }
     } catch (err) {
@@ -253,7 +253,7 @@ export default function CreateImagePage() {
         fetchProjects();
         if (data.project_id) {
           setSelectedProjectId(data.project_id);
-          localStorage.setItem('selectedProjectId_image', data.project_id);
+          localStorage.setItem('selectedProjectId', data.project_id);
         }
         setShowSaveDialog(false);
         if (pendingNavigation) {
@@ -414,7 +414,7 @@ export default function CreateImagePage() {
               <Button
                 onClick={async () => {
                   const now = new Date();
-                  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}图片项目`;
+                  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}项目`;
                   try {
                     const res = await fetch('/api/projects', {
                       method: 'POST',
@@ -424,7 +424,7 @@ export default function CreateImagePage() {
                     const data = await res.json();
                     if (data.project) {
                       setSelectedProjectId(data.project.id);
-                      localStorage.setItem('selectedProjectId_image', data.project.id);
+                      localStorage.setItem('selectedProjectId', data.project.id);
                       fetchProjects();
                     }
                   } catch (e) {
@@ -434,7 +434,7 @@ export default function CreateImagePage() {
                 className="bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white px-8 py-3 text-base"
               >
                 <Plus className="w-4 h-4 mr-2" />
-                新建图片项目
+                新建项目
               </Button>
             </CardContent>
           </Card>
