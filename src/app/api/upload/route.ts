@@ -24,9 +24,12 @@ export async function POST(request: NextRequest) {
     if (type === 'audio' && !file.type.startsWith('audio/')) {
       return NextResponse.json({ error: '请上传音频文件' }, { status: 400 });
     }
+    if (type === 'video' && !file.type.startsWith('video/')) {
+      return NextResponse.json({ error: '请上传视频文件' }, { status: 400 });
+    }
 
-    // Max file size: 20MB
-    const MAX_SIZE = 20 * 1024 * 1024;
+    // Max file size: 100MB for video, 20MB for others
+    const MAX_SIZE = type === 'video' ? 100 * 1024 * 1024 : 20 * 1024 * 1024;
     if (file.size > MAX_SIZE) {
       return NextResponse.json({ error: '文件大小不能超过20MB' }, { status: 400 });
     }
@@ -40,7 +43,7 @@ export async function POST(request: NextRequest) {
     });
 
     const buffer = Buffer.from(await file.arrayBuffer());
-    const folder = type === 'audio' ? 'audio' : 'images';
+    const folder = type === 'audio' ? 'audio' : type === 'video' ? 'videos' : 'images';
     const ext = file.name.split('.').pop() || 'bin';
     const fileName = `${folder}/${user.id}_${Date.now()}.${ext}`;
 

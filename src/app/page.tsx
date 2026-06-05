@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Sparkles, Wand2, Film, Mic, Zap, Crown, ArrowRight,
-  ImageIcon, Video, FolderOpen, MoreHorizontal, Search,
+  ImageIcon, Video, FolderOpen, MoreHorizontal, Search, Clapperboard,
 } from 'lucide-react';
 
 const features = [
@@ -16,6 +16,7 @@ const features = [
   { title: 'AI视频', desc: '文字/图片生成视频，画质增强', icon: Film, href: '/create/video', gradient: 'from-cyan-500 to-blue-600', glow: 'bg-cyan-500/20' },
   { title: 'AI音乐', desc: '文字生成歌曲，多曲风切换', icon: Mic, href: '/create/music', gradient: 'from-rose-500 to-pink-600', glow: 'bg-rose-500/20' },
   { title: '提示词反解', desc: '上传图片反向拆解提示词，中英双语', icon: Search, href: '/create/prompt-analyzer', gradient: 'from-amber-500 to-orange-600', glow: 'bg-amber-500/20' },
+  { title: '视频反解', desc: '上传视频逆向拆解生成精准提示词', icon: Clapperboard, href: '/create/video-analyzer', gradient: 'from-violet-500 to-purple-600', glow: 'bg-violet-500/20' },
 ];
 
 interface ProjectItem {

@@ -7,7 +7,7 @@ import { useTheme } from 'next-themes';
 import { useState, useEffect } from 'react';
 import {
   Sparkles, Video, Music, UserRound, CreditCard, LogOut,
-  Sun, Moon, Search, Menu, X, FolderOpen, Crown, History, Trash2, Wand2
+  Sun, Moon, Search, Menu, X, FolderOpen, Crown, History, Trash2, Wand2, Clapperboard
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -34,6 +34,7 @@ export default function Navbar() {
     { href: '/create/video', label: 'AI视频', icon: Video },
     { href: '/create/music', label: 'AI音乐', icon: Music },
     { href: '/create/prompt-analyzer', label: '提示词反解', icon: Wand2 },
+    { href: '/create/video-analyzer', label: '视频反解', icon: Clapperboard },
   ];
 
   const projectLinks = [
