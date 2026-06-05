@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
-  Bot, Download, Sparkles, Loader2, MonitorSmartphone, Plus, FolderPlus
+  Bot, Download, Sparkles, Loader2, MonitorSmartphone, Plus, FolderPlus, FolderInput
 } from 'lucide-react';
 
 interface AIModel {
@@ -208,22 +208,62 @@ export default function CreateDigitalHumanPage() {
 
         {/* 未创建项目时显示新建项目引导 */}
         {!selectedProjectId ? (
-          <Card className="border-border/50 bg-card/50 backdrop-blur">
-            <CardContent className="py-16 flex flex-col items-center justify-center text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center mb-6">
-                <Plus className="w-10 h-10 text-amber-400" />
+          <div className="space-y-6">
+            {/* 新建项目 */}
+            <Card className="border-border/50 bg-card/50 backdrop-blur">
+              <CardContent className="py-10 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center mb-4">
+                  <Plus className="w-8 h-8 text-amber-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-foreground mb-2">新建项目</h2>
+                <p className="text-muted-foreground mb-4 text-sm max-w-md">创建一个项目来开始AI创作，所有生成的作品将保存在项目中</p>
+                <Button
+                  onClick={handleCreateProject}
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-6 py-2"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  新建项目
+                </Button>
+              </CardContent>
+            </Card>
+            {/* 选择已有项目 */}
+            {projects.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">或选择已有项目</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {projects.map((project: { id: string; name: string; cover_url?: string | null; default_cover?: string | null; created_at?: string }) => {
+                    const cover = project.cover_url || project.default_cover;
+                    return (
+                      <button
+                        key={project.id}
+                        onClick={() => {
+                          setSelectedProjectId(project.id);
+                          localStorage.setItem('selectedProjectId', project.id);
+                        }}
+                        className="group text-left rounded-xl border border-border/50 bg-card/50 backdrop-blur overflow-hidden hover:border-amber-500/50 hover:bg-amber-500/5 transition-all duration-200"
+                      >
+                        <div className="aspect-[4/3] relative bg-muted/30 overflow-hidden">
+                          {cover ? (
+                            <img src={cover} alt={project.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <FolderInput className="h-8 w-8 text-muted-foreground/30" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-2.5">
+                          <p className="text-sm font-medium text-foreground truncate">{project.name}</p>
+                          {project.created_at && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{new Date(project.created_at).toLocaleDateString('zh-CN')}</p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-              <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
-              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI创作，所有生成的作品将保存在项目中</p>
-              <Button
-                onClick={handleCreateProject}
-                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-8 py-3 text-base"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                新建项目
-              </Button>
-            </CardContent>
-          </Card>
+            )}
+          </div>
         ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">

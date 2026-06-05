@@ -11,7 +11,7 @@ import {
   Download, Sparkles, Loader2,
   ChevronDown, FolderPlus,
   RefreshCw, Pencil, Check, Trash2, Clock, CheckCircle2, XCircle, X,
-  Upload, ImagePlus, Plus
+  Upload, ImagePlus, Plus, FolderInput
 } from 'lucide-react';
 
 interface Template {
@@ -406,58 +406,106 @@ export default function CreateImagePage() {
 
         {/* 未创建项目时显示新建项目引导 */}
         {!selectedProjectId ? (
-          <Card className="border-border/50 bg-card/50 backdrop-blur">
-            <CardContent className="py-16 flex flex-col items-center justify-center text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500/20 to-purple-500/20 flex items-center justify-center mb-6">
-                <Plus className="w-10 h-10 text-violet-400" />
-              </div>
-              <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
-              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI创作，所有生成的作品将保存在项目中</p>
-              <Button
-                onClick={async () => {
-                  const now = new Date();
-                  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}项目`;
-                  try {
-                    const res = await fetch('/api/projects', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                      body: JSON.stringify({ name: dateName }),
-                    });
-                    const data = await res.json();
-                    if (data.project) {
-                      setSelectedProjectId(data.project.id);
-                      localStorage.setItem('selectedProjectId', data.project.id);
-                      fetchProjects();
-                    } else if (res.status === 409) {
-                      // 同名项目已存在，从列表中找到并选中
-                      await fetchProjects();
-                      const projRes = await fetch('/api/projects', { headers: getAuthHeaders() });
-                      if (projRes.ok) {
-                        const projData = await projRes.json();
-                        const existing = projData.projects?.find((p: { name: string }) => p.name === dateName);
-                        if (existing) {
-                          setSelectedProjectId(existing.id);
-                          localStorage.setItem('selectedProjectId', existing.id);
+          <div className="space-y-6">
+            {/* 新建项目 */}
+            <Card className="border-border/50 bg-card/50 backdrop-blur">
+              <CardContent className="py-10 flex flex-col items-center justify-center text-center">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-500/20 to-purple-500/20 flex items-center justify-center mb-4">
+                  <Plus className="w-8 h-8 text-violet-400" />
+                </div>
+                <h2 className="text-lg font-semibold text-foreground mb-2">新建项目</h2>
+                <p className="text-muted-foreground mb-4 text-sm max-w-md">创建一个项目来开始AI创作，所有生成的作品将保存在项目中</p>
+                <Button
+                  onClick={async () => {
+                    const now = new Date();
+                    const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}项目`;
+                    try {
+                      const res = await fetch('/api/projects', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+                        body: JSON.stringify({ name: dateName }),
+                      });
+                      const data = await res.json();
+                      if (data.project) {
+                        setSelectedProjectId(data.project.id);
+                        localStorage.setItem('selectedProjectId', data.project.id);
+                        fetchProjects();
+                      } else if (res.status === 409) {
+                        await fetchProjects();
+                        const projRes = await fetch('/api/projects', { headers: getAuthHeaders() });
+                        if (projRes.ok) {
+                          const projData = await projRes.json();
+                          const existing = projData.projects?.find((p: { name: string }) => p.name === dateName);
+                          if (existing) {
+                            setSelectedProjectId(existing.id);
+                            localStorage.setItem('selectedProjectId', existing.id);
+                          }
                         }
+                      } else {
+                        console.error('创建项目失败:', data.error);
                       }
-                    } else {
-                      console.error('创建项目失败:', data.error);
+                    } catch (e) {
+                      console.error('创建项目失败:', e);
                     }
-                  } catch (e) {
-                    console.error('创建项目失败:', e);
-                  }
-                }}
-                className="bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white px-8 py-3 text-base"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                新建项目
-              </Button>
-            </CardContent>
-          </Card>
+                  }}
+                  className="bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white px-6 py-2"
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  新建项目
+                </Button>
+              </CardContent>
+            </Card>
+            {/* 选择已有项目 */}
+            {projects.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-muted-foreground mb-3">或选择已有项目</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {projects.map((project: { id: string; name: string; cover_url?: string | null; default_cover?: string | null; created_at?: string }) => {
+                    const cover = project.cover_url || project.default_cover;
+                    return (
+                      <button
+                        key={project.id}
+                        onClick={() => {
+                          setSelectedProjectId(project.id);
+                          localStorage.setItem('selectedProjectId', project.id);
+                        }}
+                        className="group text-left rounded-xl border border-border/50 bg-card/50 backdrop-blur overflow-hidden hover:border-violet-500/50 hover:bg-violet-500/5 transition-all duration-200"
+                      >
+                        <div className="aspect-[4/3] relative bg-muted/30 overflow-hidden">
+                          {cover ? (
+                            <img src={cover} alt={project.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center">
+                              <FolderInput className="h-8 w-8 text-muted-foreground/30" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="p-2.5">
+                          <p className="text-sm font-medium text-foreground truncate">{project.name}</p>
+                          {project.created_at && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{new Date(project.created_at).toLocaleDateString('zh-CN')}</p>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Controls */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Project bar */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FolderPlus className="w-4 h-4" />
+              <span>当前项目：{projects.find((p: { id: string }) => p.id === selectedProjectId)?.name || '未命名'}</span>
+              <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={() => {
+                setSelectedProjectId('');
+                localStorage.removeItem('selectedProjectId');
+              }}>切换项目</Button>
+            </div>
             {/* Prompt Input */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
