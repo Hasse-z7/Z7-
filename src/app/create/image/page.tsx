@@ -85,7 +85,11 @@ export default function CreateImagePage() {
   const [models, setModels] = useState<AIModel[]>([]);
   const [selectedModelEndpoint, setSelectedModelEndpoint] = useState<string>('');
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    try { return localStorage.getItem('selectedProjectId') || ''; } catch { return ''; }
+  });
+  const [hydrated, setHydrated] = useState(false);
 
   // Multi-task queue
   const [tasks, setTasks] = useState<ImageTask[]>([]);
@@ -173,11 +177,17 @@ export default function CreateImagePage() {
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
+        // Validate that saved projectId still exists
         const saved = localStorage.getItem('selectedProjectId');
-        if (saved) setSelectedProjectId(saved);
+        if (saved && !(data.projects || []).some((p: { id: string }) => p.id === saved)) {
+          setSelectedProjectId('');
+          localStorage.removeItem('selectedProjectId');
+        }
+        setHydrated(true);
       }
     } catch (err) {
       console.error('Fetch projects error:', err);
+      setHydrated(true);
     }
   }, []);
 
@@ -405,8 +415,12 @@ export default function CreateImagePage() {
           <p className="text-muted-foreground mt-2">文字描述生成精美图片，支持多种风格和创作模式</p>
         </div>
 
-        {/* 未创建项目时显示新建项目引导 */}
-        {!selectedProjectId ? (
+        {/* 等待localStorage恢复完成前不渲染项目区域，避免新建项目页面闪现 */}
+        {!hydrated ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !selectedProjectId ? (
           <div className="space-y-6">
             {/* 新建项目 */}
             <Card className="border-border/50 bg-card/50 backdrop-blur">

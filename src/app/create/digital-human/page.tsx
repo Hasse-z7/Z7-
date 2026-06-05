@@ -58,7 +58,11 @@ export default function CreateDigitalHumanPage() {
 
   // Project selection
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    try { return localStorage.getItem('selectedProjectId') || ''; } catch { return ''; }
+  });
+  const [hydrated, setHydrated] = useState(false);
 
   // History works
   const [historyWorks, setHistoryWorks] = useState<DigitalHumanWork[]>([]);
@@ -98,12 +102,15 @@ export default function CreateDigitalHumanPage() {
       if (data.projects) {
         setProjects(data.projects);
         const saved = localStorage.getItem('selectedProjectId');
-        if (saved && data.projects.some((p: { id: string }) => p.id === saved)) {
-          setSelectedProjectId(saved);
+        if (saved && !data.projects.some((p: { id: string }) => p.id === saved)) {
+          setSelectedProjectId('');
+          localStorage.removeItem('selectedProjectId');
         }
       }
+      setHydrated(true);
     } catch (err) {
-      console.error('Fetch projects error:', err);
+      console.error(err);
+      setHydrated(true);
     }
   }, []);
 
@@ -206,8 +213,12 @@ export default function CreateDigitalHumanPage() {
           <p className="text-muted-foreground mt-2">文字生成数字人播报视频，多形象多音色可选</p>
         </div>
 
-        {/* 未创建项目时显示新建项目引导 */}
-        {!selectedProjectId ? (
+        {/* 等待localStorage恢复完成前不渲染项目区域，避免新建项目页面闪现 */}
+        {!hydrated ? (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : !selectedProjectId ? (
           <div className="space-y-6">
             {/* 新建项目 */}
             <Card className="border-border/50 bg-card/50 backdrop-blur">
