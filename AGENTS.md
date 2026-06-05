@@ -142,17 +142,17 @@ pnpm ts-check          # TypeScript类型检查
 ## 并发与容量规划
 
 - 并发控制：`src/lib/rate-limiter.ts`（槽位控制 + 速率限制 + 排队 + 多Key轮转）
-- 当前方案：方案A（20-30人同时在线）
-- 环境变量 `DMXAPI_API_KEYS`：逗号分隔多组Key，推荐3个，自动轮转负载均衡
+- 当前方案：5 DMXAPI Key（支持30-50人同时在线）
+- 环境变量 `DMXAPI_API_KEYS`：逗号分隔多组Key，当前5个，自动轮转负载均衡
 - 环境变量 `ARK_API_KEYS`：逗号分隔多组Key，视频生成用
-- 最大并发槽位：30（匹配3 DMXAPI Key + 1 Coze Key吞吐上限）
-- 全局速率限制：200 RPM
+- 最大并发槽位：50（匹配5 DMXAPI Key + 1 Coze Key吞吐上限）
+- 全局速率限制：300 RPM
 - 单用户速率限制：15 RPM（防止单用户占满并发）
 - 槽位超时：3分钟自动释放
 - 排队超时：90秒
 - Key故障：单个Key连续失败5次自动禁用，恢复后自动启用
 - 扩容方式：增加DMXAPI/ARK Key数量，代码已支持多Key轮转，只需改环境变量
-- 扩容升级：50+人同时在线需5-6个DMXAPI Key + 3-4个ARK Key；100+人需8-10个DMXAPI Key + 5-6个ARK Key
+- 扩容升级：100+人同时在线需8-10个DMXAPI Key + 5-6个ARK Key
 
 ## 火山方舟视频生成架构
 
