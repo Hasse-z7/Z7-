@@ -88,7 +88,7 @@ pnpm ts-check          # TypeScript类型检查
 
 - **profiles** - 用户资料（credits, free_credits, paid_credits, vip_level, is_admin）
 - **recharge_packages** - 充值套餐（credits/vip类型，价格，算力，赠送算力）
-- **orders** - 充值订单（order_no, amount, status, payment_method）
+- **orders** - 充值订单（order_no, amount, status, payment_method, alipay_trade_no, alipay_buyer_id）
 - **credits_transactions** - 算力流水（amount, balance_after, type, credits_type, description）
 - **user_works** - 用户作品（work_type, file_url, prompt, credits_cost）
 - **payment_qrcodes** - 收款码（wechat/alipay, image_url）
@@ -199,3 +199,21 @@ pnpm ts-check          # TypeScript类型检查
 3. 上传微信/支付宝收款码图片到Supabase Storage
 4. 保存URL到payment_qrcodes表
 5. 用户访问充值页面时展示对应二维码
+
+## 支付宝当面付（在线支付）
+
+- 配置：`src/lib/alipay.ts`（RSA2签名/验签 + 当面付下单 + 主动查单）
+- 环境变量：
+  - `ALIPAY_APP_ID` - 支付宝应用ID
+  - `ALIPAY_PRIVATE_KEY` - 应用RSA2私钥
+  - `ALIPAY_ALIPAY_PUBLIC_KEY` - 支付宝RSA2公钥（用于验签）
+  - `ALIPAY_GATEWAY` - 网关地址（正式: https://openapi.alipay.com/gateway.do）
+- 回调网关：`/api/payment/alipay/notify`
+  - 第一步：RSA2验签，失败返回fail
+  - 第二步：校验订单号、金额、交易状态TRADE_SUCCESS
+  - 第三步：数据库原子更新订单状态+增加算力，返回success
+- 下单接口：`/api/payment/alipay/create`（生成当面付二维码URL）
+- 查单接口：`/api/payment/alipay/query`（前端轮询+后端主动查单双重校验）
+- 前端轮询：3秒间隔，5分钟超时，支付成功自动到账
+- 微信支付：保留线下扫码+手动核验模式
+- 禁止前端支付成功直接发放算力，全靠回调+查单

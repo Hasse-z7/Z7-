@@ -60,8 +60,8 @@ interface Transaction {
 
 // 算力消耗说明
 const COST_RULES = [
-  { label: 'AI生图', value: '2算力点/张' },
-  { label: 'AI视频', value: '3算力点/秒' },
+  { label: 'AI生图', value: '1~20算力点/张' },
+  { label: 'AI视频', value: '1~30算力点/秒' },
   { label: 'AI音乐', value: '10算力点/首' },
   { label: '首充优惠', value: '充值即享额外赠送' },
 ];
@@ -89,6 +89,11 @@ export default function RechargePage() {
   const [uploadMethod, setUploadMethod] = useState<'wechat' | 'alipay'>('wechat');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [successToast, setSuccessToast] = useState<string | null>(null);
+
+  // 支付宝在线支付相关
+  const [alipayQRUrl, setAlipayQRUrl] = useState<string | null>(null);
+  const [alipayPolling, setAlipayPolling] = useState(false);
+  const [alipayPollTimer, setAlipayPollTimer] = useState<NodeJS.Timeout | null>(null);
 
   // 账单记录
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -158,29 +163,100 @@ export default function RechargePage() {
     if (!selectedPackage || !user) return;
     setLoading(true);
     try {
-      const res = await fetch('/api/recharge/create-order', {
-        credentials: 'include',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({
-          package_id: selectedPackage.id,
-          payment_method: paymentMethod,
-        }),
-      });
-      const data = await res.json();
-      if (data.order) {
-        setCurrentOrder(data.order);
+      // 支付宝走在线支付（当面付）
+      if (paymentMethod === 'alipay') {
+        const res = await fetch('/api/payment/alipay/create', {
+          credentials: 'include',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            package_id: selectedPackage.id,
+          }),
+        });
+        const data = await res.json();
+        if (data.qr_code && data.order) {
+          setAlipayQRUrl(data.qr_code);
+          setCurrentOrder(data.order);
+          startAlipayPolling(data.order.id);
+        } else {
+          alert(data.error || '创建支付宝订单失败，请重试');
+        }
       } else {
-        alert(data.error || '创建订单失败，请重试');
+        // 微信走线下扫码
+        const res = await fetch('/api/recharge/create-order', {
+          credentials: 'include',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({
+            package_id: selectedPackage.id,
+            payment_method: paymentMethod,
+          }),
+        });
+        const data = await res.json();
+        if (data.order) {
+          setCurrentOrder(data.order);
+        } else {
+          alert(data.error || '创建订单失败，请重试');
+        }
       }
     } catch {
       alert('网络异常，请稍后重试');
     } finally {
       setLoading(false);
     }
+  };
+
+  // 支付宝支付状态轮询
+  const startAlipayPolling = (orderId: string) => {
+    setAlipayPolling(true);
+    const timer = setInterval(async () => {
+      try {
+        const res = await fetch('/api/payment/alipay/query', {
+          credentials: 'include',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({ order_id: orderId }),
+        });
+        const data = await res.json();
+        if (data.status === 'TRADE_SUCCESS' || data.status === 'paid') {
+          clearInterval(timer);
+          setAlipayPolling(false);
+          setAlipayQRUrl(null);
+          setSuccessToast(`充值成功！已到账 ${data.credits_added || ''} 算力点`);
+          setCurrentOrder(null);
+          setSelectedPackage(null);
+          refreshProfile();
+          fetchTransactions(1);
+          setTimeout(() => setSuccessToast(null), 5000);
+        }
+      } catch {
+        // 轮询异常不中断，继续
+      }
+    }, 3000);
+    setAlipayPollTimer(timer);
+    // 5分钟后停止轮询
+    setTimeout(() => {
+      clearInterval(timer);
+      setAlipayPolling(false);
+    }, 300000);
+  };
+
+  const stopAlipayPolling = () => {
+    if (alipayPollTimer) {
+      clearInterval(alipayPollTimer);
+      setAlipayPollTimer(null);
+    }
+    setAlipayPolling(false);
+    setAlipayQRUrl(null);
   };
 
   const handleVerifyOrder = async () => {
@@ -433,7 +509,7 @@ export default function RechargePage() {
                           ? 'border-cyan-500 ring-2 ring-cyan-500/30 bg-cyan-500/5'
                           : 'border-border/50 hover:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/5'
                       }`}
-                      onClick={() => { setSelectedPackage(pkg); setCurrentOrder(null); }}
+                      onClick={() => { setSelectedPackage(pkg); stopAlipayPolling(); setCurrentOrder(null); }}
                     >
                       {/* 推荐标签 */}
                       {tag && (
@@ -523,7 +599,7 @@ export default function RechargePage() {
                             </div>
                             <div>
                               <p className="font-medium">支付宝</p>
-                              <p className="text-xs text-muted-foreground">支付宝扫码付款</p>
+                              <p className="text-xs text-muted-foreground">在线扫码 · 自动到账</p>
                             </div>
                           </div>
                           <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -535,7 +611,8 @@ export default function RechargePage() {
                       </CardContent>
                     </Card>
 
-                    {/* 线下付款提示 */}
+                    {/* 线下付款提示（仅微信） */}
+                    {paymentMethod === 'wechat' && (
                     <Card className="border-amber-500/20 bg-amber-500/5">
                       <CardContent className="p-4">
                         <div className="flex items-start gap-3">
@@ -543,34 +620,80 @@ export default function RechargePage() {
                           <div className="text-sm text-amber-400/90">
                             <p className="font-medium">线下扫码付款</p>
                             <p className="text-xs mt-1 text-amber-400/70">
-                              请使用{paymentMethod === 'wechat' ? '微信' : '支付宝'}扫描下方收款码完成付款，付款完成后点击「已付款，到账核验」按钮，系统将自动核对并发放算力点。
+                              请使用微信扫描下方收款码完成付款，付款完成后点击「已付款，到账核验」按钮，系统将自动核对并发放算力点。
                             </p>
                           </div>
                         </div>
                       </CardContent>
                     </Card>
+                    )}
+                    {/* 支付宝在线支付提示 */}
+                    {paymentMethod === 'alipay' && (
+                    <Card className="border-blue-500/20 bg-blue-500/5">
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <QrCode className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
+                          <div className="text-sm text-blue-400/90">
+                            <p className="font-medium">支付宝在线支付</p>
+                            <p className="text-xs mt-1 text-blue-400/70">
+                              点击确认充值后，系统将生成支付宝当面付二维码，扫码支付后算力自动到账，无需手动核验。
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    )}
                   </div>
 
                   {/* 收款码展示 + 订单 */}
                   <div className="space-y-4">
-                    {/* 收款码 */}
+                    {/* 支付宝在线支付二维码 */}
+                    {paymentMethod === 'alipay' && alipayQRUrl ? (
+                      <Card className="border-blue-500/30">
+                        <CardContent className="p-5">
+                          <p className="text-sm font-medium text-center mb-3 text-blue-400">
+                            支付宝扫码付款
+                          </p>
+                          <div className="flex flex-col items-center">
+                            <div className="relative w-52 h-52 border-2 border-dashed rounded-xl overflow-hidden border-blue-500/40 bg-white p-2">
+                              <Image
+                                src={alipayQRUrl}
+                                alt="支付宝付款码"
+                                fill
+                                className="object-contain"
+                              />
+                            </div>
+                            {alipayPolling && (
+                              <div className="mt-3 flex items-center gap-2 text-blue-400 text-sm">
+                                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                等待支付中...
+                              </div>
+                            )}
+                            <p className="text-xs text-muted-foreground mt-2">
+                              打开支付宝扫一扫，支付后自动到账
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ) : paymentMethod === 'wechat' ? (
+                    /* 微信收款码 */
                     <Card className="border-border/50">
                       <CardContent className="p-5">
                         <p className="text-sm font-medium text-center mb-3">
-                          {paymentMethod === 'wechat' ? '微信' : '支付宝'}收款码
+                          微信收款码
                         </p>
-                        {(paymentMethod === 'wechat' ? wechatQR : alipayQR)?.file_url ? (
+                        {wechatQR?.file_url ? (
                           <div className="flex flex-col items-center">
                             <div className="relative w-52 h-52 border-2 border-dashed rounded-xl overflow-hidden border-border/40 bg-white p-2">
                               <Image
-                                src={(paymentMethod === 'wechat' ? wechatQR : alipayQR)!.file_url}
-                                alt={`${paymentMethod === 'wechat' ? '微信' : '支付宝'}收款码`}
+                                src={wechatQR.file_url}
+                                alt="微信收款码"
                                 fill
                                 className="object-contain"
                               />
                             </div>
                             <p className="text-xs text-muted-foreground mt-2">
-                              打开{paymentMethod === 'wechat' ? '微信' : '支付宝'}扫一扫付款
+                              打开微信扫一扫付款
                             </p>
                           </div>
                         ) : (
@@ -583,7 +706,7 @@ export default function RechargePage() {
                               className="mt-2"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setUploadMethod(paymentMethod);
+                                setUploadMethod('wechat');
                                 setShowQRUpload(true);
                               }}
                             >
@@ -593,6 +716,7 @@ export default function RechargePage() {
                         )}
                       </CardContent>
                     </Card>
+                    ) : null}
 
                     {/* 订单确认 / 订单信息 */}
                     <Card className="border-border/50">
@@ -614,7 +738,7 @@ export default function RechargePage() {
                             </div>
                             <div className="flex items-center justify-between text-sm">
                               <span className="text-muted-foreground">支付方式</span>
-                              <span className="font-medium">{paymentMethod === 'wechat' ? '微信支付' : '支付宝'}</span>
+                              <span className="font-medium">{paymentMethod === 'wechat' ? '微信支付' : '支付宝在线支付'}</span>
                             </div>
                             <div className="pt-3 border-t border-border/30 flex items-center justify-between">
                               <span className="text-muted-foreground">应付金额</span>
@@ -629,7 +753,51 @@ export default function RechargePage() {
                               {loading ? '创建订单中...' : `确认充值 ¥${selectedPackage.price}`}
                             </Button>
                           </div>
+                        ) : currentOrder.payment_method === 'alipay' ? (
+                          /* 支付宝订单：显示订单信息+轮询状态 */
+                          <div className="space-y-4">
+                            <div className="p-3 rounded-lg bg-blue-500/5 border border-blue-500/20">
+                              <div className="flex items-center gap-2 text-sm mb-3">
+                                <QrCode className="w-4 h-4 text-blue-400" />
+                                <span className="text-blue-400 font-medium">支付宝在线支付</span>
+                              </div>
+                              <div className="space-y-2 text-xs">
+                                <div className="flex items-start gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 font-medium">1</span>
+                                  <span className="text-muted-foreground pt-0.5">扫描上方支付宝二维码完成付款</span>
+                                </div>
+                                <div className="flex items-start gap-2">
+                                  <span className="w-5 h-5 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center shrink-0 font-medium">2</span>
+                                  <span className="text-muted-foreground pt-0.5">支付成功后算力自动到账，无需手动操作</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-muted/30 border border-border/30">
+                              <div className="space-y-1 text-xs text-muted-foreground">
+                                <p>订单号: <span className="text-foreground font-mono">{currentOrder.order_no || currentOrder.id}</span></p>
+                                <p>套餐: {currentOrder.package_name || selectedPackage?.name}</p>
+                                <p>金额: <span className="text-cyan-400 font-medium">¥{currentOrder.amount}</span></p>
+                                <p>算力: <span className="text-cyan-400 font-medium">{selectedPackage ? (selectedPackage.credits + (selectedPackage.bonus_credits || 0)) : '-'}点</span></p>
+                                <p>支付方式: 支付宝在线支付</p>
+                              </div>
+                            </div>
+                            {alipayPolling && (
+                              <div className="flex items-center justify-center gap-2 text-blue-400 text-sm py-2">
+                                <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                                等待支付中，支付成功后自动到账...
+                              </div>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="w-full text-muted-foreground"
+                              onClick={() => { stopAlipayPolling(); setCurrentOrder(null); }}
+                            >
+                              <ChevronLeft className="w-4 h-4 mr-1" /> 返回重新选择
+                            </Button>
+                          </div>
                         ) : (
+                          /* 微信订单：手动核验流程 */
                           <div className="space-y-4">
                             <div className="p-3 rounded-lg bg-cyan-500/5 border border-cyan-500/20">
                               <div className="flex items-center gap-2 text-sm mb-3">
@@ -639,7 +807,7 @@ export default function RechargePage() {
                               <div className="space-y-2 text-xs">
                                 <div className="flex items-start gap-2">
                                   <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 font-medium">1</span>
-                                  <span className="text-muted-foreground pt-0.5">扫描左侧{currentOrder.payment_method === 'wechat' ? '微信' : '支付宝'}收款码完成付款</span>
+                                  <span className="text-muted-foreground pt-0.5">扫描上方微信收款码完成付款</span>
                                 </div>
                                 <div className="flex items-start gap-2">
                                   <span className="w-5 h-5 rounded-full bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0 font-medium">2</span>
@@ -657,7 +825,7 @@ export default function RechargePage() {
                                 <p>套餐: {currentOrder.package_name || selectedPackage?.name}</p>
                                 <p>金额: <span className="text-cyan-400 font-medium">¥{currentOrder.amount}</span></p>
                                 <p>算力: <span className="text-cyan-400 font-medium">{currentOrder.credits || currentOrder.credits_granted || selectedPackage ? (selectedPackage!.credits + (selectedPackage!.bonus_credits || 0)) : '-'}点</span></p>
-                                <p>支付方式: {currentOrder.payment_method === 'wechat' ? '微信支付' : '支付宝'}</p>
+                                <p>支付方式: 微信支付</p>
                               </div>
                             </div>
                             <Button
