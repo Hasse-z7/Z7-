@@ -217,7 +217,7 @@ export default function CreateDigitalHumanPage() {
                     </div>
                   </div>
                   <span className="ml-auto text-sm text-muted-foreground">
-                    {(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <>消耗 <span className="text-cyan-400 font-bold">{selectedAvatar === 'marketer' ? 30 : 25}</span> 算力</>}
+                    {(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-xs">VIP</Badge>}
                   </span>
                 </div>
                 <Button
@@ -261,7 +261,7 @@ export default function CreateDigitalHumanPage() {
                     </div>
                     {tpl.is_vip_only && <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs shrink-0 ml-2">VIP</Badge>}
                   </div>
-                  <div className="text-xs mt-2">{(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <span className="text-cyan-400">{tpl.credits_cost} 算力</span>}</div>
+                  <div className="text-xs mt-2">{(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-xs">VIP</Badge>}</div>
                 </CardContent>
               </Card>
             ))}
