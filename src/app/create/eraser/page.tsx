@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, Eraser, RotateCcw, Download, ImageIcon, Video, Minus, Plus, Brush, MousePointer2, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
+import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 
@@ -13,7 +14,6 @@ export default function EraserPage() {
   const [originalUrl, setOriginalUrl] = useState<string>('');
   const [originalFile, setOriginalFile] = useState<File | null>(null);
   const [resultUrl, setResultUrl] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false);
   const [brushSize, setBrushSize] = useState(20);
   const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState<'brush' | 'eraser_tool'>('brush');
@@ -143,64 +143,43 @@ export default function EraserPage() {
     setHasMask(false);
   }, [renderCanvas]);
 
-  const handleProcess = useCallback(async () => {
-    if (!originalFile || !hasMask) return;
-    setIsProcessing(true);
-    setResultUrl('');
+  // 限流：3秒冷却 + 请求中锁定
+  const processThrottle = useActionThrottle(
+    async () => {
+      if (!originalFile || !hasMask) return;
+      setResultUrl('');
 
-    try {
-      if (mediaType === 'image') {
-        // Get mask as blob
-        const maskCanvas = maskCanvasRef.current;
-        if (!maskCanvas) return;
-
-        const maskBlob = await new Promise<Blob>((resolve) => {
-          maskCanvas.toBlob((blob) => resolve(blob!), 'image/png');
-        });
-
-        const formData = new FormData();
-        formData.append('image', originalFile);
-        formData.append('mask', maskBlob, 'mask.png');
-
-        const res = await fetch('/api/ai/eraser', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || '处理失败');
+      try {
+        if (mediaType === 'image') {
+          const maskCanvas = maskCanvasRef.current;
+          if (!maskCanvas) return;
+          const maskBlob = await new Promise<Blob>((resolve) => {
+            maskCanvas.toBlob((blob) => resolve(blob!), 'image/png');
+          });
+          const formData = new FormData();
+          formData.append('image', originalFile);
+          formData.append('mask', maskBlob, 'mask.png');
+          const res = await fetch('/api/ai/eraser', { method: 'POST', body: formData });
+          if (res.status === 429) { alert('请求频繁，请稍后重试'); return; }
+          if (!res.ok) { const err = await res.json(); throw new Error(err.error || '处理失败'); }
+          const blob = await res.blob();
+          setResultUrl(URL.createObjectURL(blob));
+        } else {
+          const formData = new FormData();
+          formData.append('video', originalFile);
+          const res = await fetch('/api/ai/eraser/video', { method: 'POST', body: formData });
+          if (res.status === 429) { alert('请求频繁，请稍后重试'); return; }
+          if (!res.ok) { const err = await res.json(); throw new Error(err.error || '处理失败'); }
+          const data = await res.json();
+          if (data.frames) { setResultUrl(data.frames[0] || ''); }
         }
-
-        const blob = await res.blob();
-        setResultUrl(URL.createObjectURL(blob));
-      } else {
-        // Video processing
-        const formData = new FormData();
-        formData.append('video', originalFile);
-
-        const res = await fetch('/api/ai/eraser/video', {
-          method: 'POST',
-          body: formData,
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          throw new Error(err.error || '处理失败');
-        }
-
-        const data = await res.json();
-        if (data.frames) {
-          setResultUrl(data.frames[0] || '');
-        }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : '处理失败';
+        alert(message);
       }
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '处理失败';
-      alert(message);
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [originalFile, hasMask, mediaType]);
+    },
+    { cooldown: 3000 },
+  );
 
   const handleDownload = useCallback(() => {
     if (!resultUrl) return;
@@ -337,15 +316,17 @@ export default function EraserPage() {
 
                 <div className="flex gap-2">
                   <Button
-                    onClick={handleProcess}
-                    disabled={isProcessing || !hasMask}
+                    onClick={() => processThrottle.run()}
+                    disabled={processThrottle.disabled || !hasMask}
                     className="flex-1 bg-cyan-600 hover:bg-cyan-700"
                   >
-                    {isProcessing ? (
+                    {processThrottle.loading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         AI修复中...
                       </>
+                    ) : processThrottle.cooling ? (
+                      `${processThrottle.cooldownRemaining}秒后可再次修复`
                     ) : (
                       <>
                         <Eraser className="w-4 h-4 mr-2" />
@@ -372,15 +353,17 @@ export default function EraserPage() {
                 </div>
                 <div className="flex gap-2">
                   <Button
-                    onClick={handleProcess}
-                    disabled={isProcessing}
+                    onClick={() => processThrottle.run()}
+                    disabled={processThrottle.disabled}
                     className="flex-1 bg-cyan-600 hover:bg-cyan-700"
                   >
-                    {isProcessing ? (
+                    {processThrottle.loading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                         视频处理中...
                       </>
+                    ) : processThrottle.cooling ? (
+                      `${processThrottle.cooldownRemaining}秒后可再次修复`
                     ) : (
                       <>
                         <Eraser className="w-4 h-4 mr-2" />

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
 
 /** 检查系统开关 */
 async function isFeatureOpen(key: string): Promise<boolean> {
@@ -14,6 +15,8 @@ async function isFeatureOpen(key: string): Promise<boolean> {
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimited = rateLimitResponse(request, 'auth');
+  if (rateLimited) return rateLimited;
   try {
     // 检查注册开关（新用户注册时）
     const { phone, code } = await request.json();

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
 
 /** 将手机号映射为虚拟邮箱，复用 Supabase 邮箱密码认证 */
 function phoneToVirtualEmail(phone: string): string {
@@ -19,6 +20,9 @@ async function isFeatureOpen(key: string): Promise<boolean> {
 }
 
 export async function POST(request: NextRequest) {
+  const rateLimited = rateLimitResponse(request, 'auth');
+  if (rateLimited) return rateLimited;
+
   try {
     // 检查注册开关
     const registrationOpen = await isFeatureOpen('registration_open');

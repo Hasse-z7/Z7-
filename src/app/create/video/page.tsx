@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { usePersistedState } from '@/hooks/use-persisted-state';
+import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -463,97 +464,87 @@ export default function CreateVideoPage() {
     finally { setUploadingFile(false); }
   };
 
-  const handleGenerate = async (overridePrompt?: string) => {
-    if (!user) { router.push('/login'); return; }
-    const activePrompt = overridePrompt || prompt;
-    if (!activePrompt.trim()) return;
+  // 限流：3秒冷却 + 请求中锁定
+  const generateThrottle = useActionThrottle(
+    async () => {
+      if (!user) { router.push('/login'); return; }
+      const activePrompt = prompt;
+      if (typeof activePrompt !== 'string' || !activePrompt.trim()) return;
 
-    // 模型独立定价 × 时长
+      const modelCost = models.find(m => m.endpoint_id === selectedModelEndpoint)?.credits_cost || 3;
+      const cost = modelCost * duration;
+      if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
+
+      const localTaskId = `vid_${Date.now()}_${++taskIdCounter.current}`;
+      const newTask: VideoTask = {
+        id: localTaskId, taskId: '', prompt: activePrompt, status: 'queued', statusText: '提交中...',
+        resultUrl: '', error: '', editingPrompt: activePrompt, isEditing: false, createdAt: Date.now(),
+      };
+      setTasks(prev => [newTask, ...prev]);
+      setPrompt(''); clearPrompt(); clearRefImages(); clearAudioUrl(); clearFirstFrame(); clearLastFrame();
+
+      try {
+        const res = await fetch('/api/ai/video', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ prompt: activePrompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined, images: refImageUrls.length > 0 ? refImageUrls : undefined, audio_url: audioUrl || undefined, first_frame_url: firstFrameUrl || undefined, last_frame_url: lastFrameUrl || undefined }),
+        });
+        const data = await res.json();
+
+        if (res.status === 429) {
+          setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'failed', error: '请求频繁，请稍后重试', statusText: '提交失败' } : t));
+          return;
+        }
+        if (!res.ok || data.error) {
+          setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'failed', error: data.error || '生成失败', statusText: '提交失败' } : t));
+          return;
+        }
+        if (data.remaining_credits !== undefined) updateCredits(data.remaining_credits);
+        const serverTaskId = data.task_id;
+        if (!selectedProjectId && serverTaskId) setUnsavedTaskIds(prev => [...prev, serverTaskId]);
+        if (serverTaskId) {
+          setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, taskId: serverTaskId, status: 'queued', statusText: '排队中...' } : t));
+          startPolling(localTaskId, serverTaskId);
+        } else {
+          const videoUrl = data.video_url || data.videoUrl || data.url;
+          if (videoUrl) {
+            setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'succeeded', resultUrl: videoUrl, statusText: '生成完成' } : t));
+          } else {
+            setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'failed', error: '未获取到视频URL', statusText: '生成失败' } : t));
+          }
+        }
+      } catch {
+        setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'failed', error: '生成失败，请重试', statusText: '提交失败' } : t));
+      }
+    },
+    { cooldown: 3000 },
+  );
+
+  // 重试也走限流
+  const handleRegenerate = async (taskPrompt: string) => {
+    if (!user) { router.push('/login'); return; }
+    if (!taskPrompt.trim()) return;
     const modelCost = models.find(m => m.endpoint_id === selectedModelEndpoint)?.credits_cost || 3;
     const cost = modelCost * duration;
     if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
-
-    // Create local task entry
     const localTaskId = `vid_${Date.now()}_${++taskIdCounter.current}`;
-    const newTask: VideoTask = {
-      id: localTaskId,
-      taskId: '',
-      prompt: activePrompt,
-      status: 'queued',
-      statusText: '提交中...',
-      resultUrl: '',
-      error: '',
-      editingPrompt: activePrompt,
-      isEditing: false,
-      createdAt: Date.now(),
-    };
+    const newTask: VideoTask = { id: localTaskId, taskId: '', prompt: taskPrompt, status: 'queued', statusText: '提交中...', resultUrl: '', error: '', editingPrompt: taskPrompt, isEditing: false, createdAt: Date.now() };
     setTasks(prev => [newTask, ...prev]);
-
-    // Clear persisted state after successful submission
-    if (!overridePrompt) {
-      setPrompt('');
-      clearPrompt();
-      clearRefImages();
-      clearAudioUrl();
-      clearFirstFrame();
-      clearLastFrame();
-    }
-
     try {
       const res = await fetch('/api/ai/video', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ prompt: activePrompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined, images: refImageUrls.length > 0 ? refImageUrls : undefined, audio_url: audioUrl || undefined, first_frame_url: firstFrameUrl || undefined, last_frame_url: lastFrameUrl || undefined }),
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ prompt: taskPrompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
       });
       const data = await res.json();
-
-      if (!res.ok || data.error) {
-        setTasks(prev => prev.map(t =>
-          t.id === localTaskId ? { ...t, status: 'failed', error: data.error || '生成失败', statusText: '提交失败' } : t
-        ));
-        return;
-      }
-
-      // Update credits
-      if (data.remaining_credits !== undefined) {
-        updateCredits(data.remaining_credits);
-      }
-
+      if (res.status === 429) { setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'failed', error: '请求频繁，请稍后重试', statusText: '提交失败' } : t)); return; }
+      if (!res.ok || data.error) { setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'failed', error: data.error || '生成失败', statusText: '提交失败' } : t)); return; }
+      if (data.remaining_credits !== undefined) updateCredits(data.remaining_credits);
       const serverTaskId = data.task_id;
-
-      // Track unsaved tasks
-      if (!selectedProjectId && serverTaskId) {
-        setUnsavedTaskIds(prev => [...prev, serverTaskId]);
-      }
-
-      if (serverTaskId) {
-        // Async task: start polling
-        setTasks(prev => prev.map(t =>
-          t.id === localTaskId ? { ...t, taskId: serverTaskId, status: 'queued', statusText: '排队中...' } : t
-        ));
-        startPolling(localTaskId, serverTaskId);
-      } else {
-        // Sync fallback
-        const videoUrl = data.video_url || data.videoUrl || data.url;
-        if (videoUrl) {
-          setTasks(prev => prev.map(t =>
-            t.id === localTaskId ? { ...t, status: 'succeeded', resultUrl: videoUrl, statusText: '生成完成' } : t
-          ));
-        } else {
-          setTasks(prev => prev.map(t =>
-            t.id === localTaskId ? { ...t, status: 'failed', error: '未获取到视频URL', statusText: '生成失败' } : t
-          ));
-        }
-      }
-    } catch {
-      setTasks(prev => prev.map(t =>
-        t.id === localTaskId ? { ...t, status: 'failed', error: '生成失败，请重试', statusText: '提交失败' } : t
-      ));
-    }
+      if (!selectedProjectId && serverTaskId) setUnsavedTaskIds(prev => [...prev, serverTaskId]);
+      if (serverTaskId) { setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, taskId: serverTaskId, status: 'queued', statusText: '排队中...' } : t)); startPolling(localTaskId, serverTaskId); }
+      else { const videoUrl = data.video_url || data.videoUrl || data.url; if (videoUrl) { setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'succeeded', resultUrl: videoUrl, statusText: '生成完成' } : t)); } else { setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'failed', error: '未获取到视频URL', statusText: '生成失败' } : t)); } }
+    } catch { setTasks(prev => prev.map(t => t.id === localTaskId ? { ...t, status: 'failed', error: '生成失败，请重试', statusText: '提交失败' } : t)); }
   };
 
   // Task actions
@@ -584,12 +575,11 @@ export default function CreateVideoPage() {
     ));
   };
 
-  const handleRegenerate = (localTaskId: string) => {
+  const handleRetryTask = (localTaskId: string) => {
     const task = tasks.find(t => t.id === localTaskId);
     if (!task) return;
-    // Remove old task, generate with new prompt
     handleRemoveTask(localTaskId);
-    handleGenerate(task.prompt);
+    handleRegenerate(task.prompt);
   };
 
   const activeCount = tasks.filter(t => t.status === 'queued' || t.status === 'processing').length;
@@ -932,11 +922,11 @@ export default function CreateVideoPage() {
                 )}
                 <Button
                   className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium"
-                  onClick={() => handleGenerate()}
-                  disabled={typeof prompt !== 'string' || !prompt.trim()}
+                  onClick={() => generateThrottle.run()}
+                  disabled={generateThrottle.disabled || typeof prompt !== 'string' || !prompt.trim()}
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
-                  开始生成视频
+                  {generateThrottle.loading ? '提交中...' : generateThrottle.cooling ? `${generateThrottle.cooldownRemaining}秒后可再次生成` : '开始生成视频'}
                 </Button>
               </CardContent>
             </Card>
@@ -1035,7 +1025,7 @@ export default function CreateVideoPage() {
                                 <Button
                                   size="sm" variant="ghost"
                                   className="h-7 text-xs text-cyan-400 hover:text-cyan-300"
-                                  onClick={() => handleRegenerate(task.id)}
+                                  onClick={() => handleRetryTask(task.id)}
                                 >
                                   <RefreshCw className="w-3.5 h-3.5 mr-1" />重新生成
                                 </Button>
@@ -1060,7 +1050,7 @@ export default function CreateVideoPage() {
                                 <Button
                                   size="sm" variant="ghost"
                                   className="h-7 text-xs text-cyan-400 hover:text-cyan-300"
-                                  onClick={() => handleRegenerate(task.id)}
+                                  onClick={() => handleRetryTask(task.id)}
                                 >
                                   <RefreshCw className="w-3.5 h-3.5 mr-1" />重新生成
                                 </Button>

@@ -298,6 +298,68 @@ export function checkUserRateLimit(userId: string): { allowed: boolean; remainin
   return { allowed, remaining: Math.max(0, USER_RATE_LIMIT - entry.timestamps.length) };
 }
 
+// ==================== 按业务分类的用户级精细限流 ====================
+
+/**
+ * 智能体侧用户分类限流配置
+ * 单人每分钟：视频≤3、出图≤10、反推≤5、修图去水印≤5
+ */
+const USER_CATEGORY_LIMITS: Record<string, number> = {
+  image: 10,         // 出图10次/分钟
+  video: 3,          // 视频生成3次/分钟
+  prompt_analyze: 5, // 提示词反推5次/分钟
+  eraser: 5,         // 修图去水印5次/分钟
+};
+
+// 按用户+分类的速率记录
+const userCategoryMap = new Map<string, { timestamps: number[] }>();
+
+/**
+ * 检查用户分类速率限制（智能体侧）
+ * @param userId 用户ID
+ * @param category 业务分类: image | video | prompt_analyze | eraser
+ * @returns { allowed, remaining, limit, retryAfter }
+ */
+export function checkUserCategoryRateLimit(
+  userId: string,
+  category: string
+): { allowed: boolean; remaining: number; limit: number; retryAfter?: number } {
+  const now = Date.now();
+  const limit = USER_CATEGORY_LIMITS[category];
+  if (!limit) return { allowed: true, remaining: Infinity, limit: 0 };
+
+  const key = `${category}_${userId}`;
+  const entry = userCategoryMap.get(key) || { timestamps: [] };
+
+  entry.timestamps = entry.timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+
+  const allowed = entry.timestamps.length < limit;
+  if (allowed) {
+    entry.timestamps.push(now);
+    userCategoryMap.set(key, entry);
+  }
+
+  const remaining = Math.max(0, limit - entry.timestamps.length);
+  const retryAfter = allowed ? undefined : Math.ceil((entry.timestamps[0] ? RATE_LIMIT_WINDOW_MS - (now - entry.timestamps[0]) : 60000) / 1000);
+
+  return { allowed, remaining, limit, retryAfter };
+}
+
+/**
+ * 获取用户分类限流超限时的统一提示文案
+ */
+export function getCategoryRateLimitMessage(category: string): string {
+  const categoryNames: Record<string, string> = {
+    image: '出图',
+    video: '视频生成',
+    prompt_analyze: '提示词反推',
+    eraser: '修图去水印',
+  };
+  const name = categoryNames[category] || '该功能';
+  const limit = USER_CATEGORY_LIMITS[category] || 0;
+  return `当前访问量大，请稍后重试。${name}每分钟最多${limit}次`;
+}
+
 // ==================== 排队系统 ====================
 
 /**

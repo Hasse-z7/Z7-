@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { generateMusic } from '@/lib/coze-api';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
+import { checkUserCategoryRateLimit, getCategoryRateLimitMessage } from '@/lib/rate-limiter';
 import { deductCredits, refundCredits, recordTransaction, CREDITS_PER_MUSIC } from '@/lib/credits-helpers';
 
 export async function POST(request: NextRequest) {
+  // IP限流：AI音乐5次/分钟（归入反推解析类）
+  const rateLimited = rateLimitResponse(request, 'analyze');
+  if (rateLimited) return rateLimited;
+
   try {
     const authResult = await getAuthUser(request);
     if (!authResult.user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
+    // 智能体侧用户分类限流：AI音乐5次/分钟
+    const userCategoryCheck = checkUserCategoryRateLimit(authResult.user.id, 'prompt_analyze');
+    if (!userCategoryCheck.allowed) {
+      return NextResponse.json(
+        { error: getCategoryRateLimitMessage('prompt_analyze') },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();

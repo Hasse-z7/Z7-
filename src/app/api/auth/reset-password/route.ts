@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
 
 /** 找回密码：通过手机验证码验证身份后重置密码 */
 export async function POST(request: NextRequest) {
+  const rateLimited = rateLimitResponse(request, 'auth');
+  if (rateLimited) return rateLimited;
   try {
     const { phone, code, newPassword } = await request.json();
 

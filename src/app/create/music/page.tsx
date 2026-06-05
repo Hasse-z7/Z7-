@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
+import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,7 +45,6 @@ export default function CreateMusicPage() {
   const [prompt, setPrompt] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('pop');
-  const [loading, setLoading] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
   const [resultLyrics, setResultLyrics] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
@@ -107,42 +107,35 @@ export default function CreateMusicPage() {
     fetchExistingWorks();
   }, [fetchTemplates, fetchProjects, fetchExistingWorks]);
 
-  const handleGenerate = async () => {
-    if (!user) { router.push('/login'); return; }
-    const cost = 10;
-    if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
+  // 限流：3秒冷却 + 请求中锁定
+  const generateThrottle = useActionThrottle(
+    async () => {
+      if (!user) { router.push('/login'); return; }
+      const cost = 10;
+      if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
 
-    setLoading(true);
-    setResultUrl('');
-    try {
-      const res = await fetch('/api/ai/music', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ prompt: prompt || lyrics, style: selectedStyle, lyrics, project_id: selectedProjectId || undefined }),
-      });
-      const data = await res.json();
-      const audioUrl = data.audio_url || data.url;
-      if (audioUrl) {
-        setResultUrl(audioUrl);
-        setResultLyrics(data.lyrics || '');
-        if (data.remaining_credits !== undefined) {
-          updateCredits(data.remaining_credits);
+      setResultUrl('');
+      try {
+        const res = await fetch('/api/ai/music', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ prompt: prompt || lyrics, style: selectedStyle, lyrics, project_id: selectedProjectId || undefined }),
+        });
+        const data = await res.json();
+        if (res.status === 429) { alert('请求频繁，请稍后重试'); return; }
+        const audioUrl = data.audio_url || data.url;
+        if (audioUrl) {
+          setResultUrl(audioUrl);
+          setResultLyrics(data.lyrics || '');
+          if (data.remaining_credits !== undefined) updateCredits(data.remaining_credits);
+          fetchExistingWorks();
+        } else {
+          alert(data.error || '生成失败');
         }
-        // Refresh history
-        fetchExistingWorks();
-      } else {
-        alert(data.error || '生成失败');
-      }
-    } catch {
-      alert('生成失败，请重试');
-    } finally {
-      setLoading(false);
-    }
-  };
+      } catch { alert('生成失败，请重试'); }
+    },
+    { cooldown: 3000 },
+  );
 
   const handleCreateProject = async () => {
     const now = new Date();
@@ -325,11 +318,11 @@ export default function CreateMusicPage() {
                 )}
                 <Button
                   className="w-full bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-medium"
-                  onClick={handleGenerate}
-                  disabled={loading || ((typeof prompt !== 'string' || !prompt.trim()) && (typeof lyrics !== 'string' || !lyrics.trim()))}
+                  onClick={() => generateThrottle.run()}
+                  disabled={generateThrottle.disabled || ((typeof prompt !== 'string' || !prompt.trim()) && (typeof lyrics !== 'string' || !lyrics.trim()))}
                 >
-                  {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                  {loading ? '生成中...' : '开始创作音乐'}
+                  {generateThrottle.loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                  {generateThrottle.loading ? '生成中...' : generateThrottle.cooling ? `${generateThrottle.cooldownRemaining}秒后可再次生成` : '开始创作音乐'}
                 </Button>
               </CardContent>
             </Card>

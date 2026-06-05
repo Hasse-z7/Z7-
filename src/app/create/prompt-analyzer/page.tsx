@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
@@ -39,7 +40,6 @@ export default function PromptAnalyzerPage() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState('真人写实');
-  const [analyzing, setAnalyzing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [result, setResult] = useState<PromptResult | null>(null);
   const [streamingText, setStreamingText] = useState('');
@@ -93,72 +93,55 @@ export default function PromptAnalyzerPage() {
     }
   }, []);
 
-  const handleAnalyze = async () => {
-    if (!imageUrl || !user) return;
+  // 限流：3秒冷却 + 请求中锁定
+  const analyzeThrottle = useActionThrottle(
+    async () => {
+      if (!imageUrl || !user) return;
+      setResult(null);
+      setStreamingText('');
 
-    setAnalyzing(true);
-    setResult(null);
-    setStreamingText('');
+      try {
+        const res = await fetch('/api/ai/prompt-analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+          body: JSON.stringify({ imageUrl, style: selectedStyle }),
+        });
 
-    try {
-      const res = await fetch('/api/ai/prompt-analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ imageUrl, style: selectedStyle }),
-      });
+        if (res.status === 429) { alert('请求频繁，请稍后重试'); return; }
+        if (!res.ok) { const err = await res.json(); alert(err.error || '解析失败'); return; }
 
-      if (!res.ok) {
-        const err = await res.json();
-        alert(err.error || '解析失败');
-        return;
-      }
+        const reader = res.body?.getReader();
+        if (!reader) return;
 
-      const reader = res.body?.getReader();
-      if (!reader) return;
+        const decoder = new TextDecoder();
+        let fullText = '';
 
-      const decoder = new TextDecoder();
-      let fullText = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                fullText += parsed.content;
-                setStreamingText(fullText);
-              }
-              if (parsed.error) {
-                alert(parsed.error);
-              }
-            } catch {
-              // skip
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') break;
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) { fullText += parsed.content; setStreamingText(fullText); }
+                if (parsed.error) { alert(parsed.error); }
+              } catch { /* skip */ }
             }
           }
         }
+        const parsed = parsePromptResult(fullText);
+        setResult(parsed);
+      } catch (err) {
+        console.error('Analyze failed:', err);
+        alert('解析失败，请重试');
       }
-
-      // Parse the three sections from full text
-      const parsed = parsePromptResult(fullText);
-      setResult(parsed);
-    } catch (err) {
-      console.error('Analyze failed:', err);
-      alert('解析失败，请重试');
-    } finally {
-      setAnalyzing(false);
-    }
-  };
+    },
+    { cooldown: 3000 },
+  );
 
   const parsePromptResult = (text: string): PromptResult => {
     const chineseMatch = text.match(/【中文正向提示词】\s*([\s\S]*?)(?=【英文生成提示词】|$)/);
@@ -294,14 +277,16 @@ export default function PromptAnalyzerPage() {
             {/* Analyze Button */}
             <Button
               className="w-full h-12 text-base bg-gradient-to-r from-cyan-500 to-sky-500 hover:from-cyan-600 hover:to-sky-600 text-white font-medium rounded-xl transition-all duration-300 hover:shadow-lg hover:shadow-cyan-500/25"
-              disabled={!imageUrl || analyzing || uploading}
-              onClick={handleAnalyze}
+              disabled={!imageUrl || analyzeThrottle.disabled || uploading}
+              onClick={() => analyzeThrottle.run()}
             >
-              {analyzing ? (
+              {analyzeThrottle.loading ? (
                 <>
                   <Loader2 className="w-5 h-5 mr-2 animate-spin" />
                   正在解析...
                 </>
+              ) : analyzeThrottle.cooling ? (
+                `${analyzeThrottle.cooldownRemaining}秒后可再次解析`
               ) : (
                 <>
                   <Wand2 className="w-5 h-5 mr-2" />
@@ -313,7 +298,7 @@ export default function PromptAnalyzerPage() {
 
           {/* Right: Results */}
           <div className="space-y-4">
-            {analyzing && !result && streamingText && (
+            {analyzeThrottle.loading && !result && streamingText && (
               <Card className="bg-slate-900/60 border-slate-700/50 backdrop-blur-sm">
                 <CardContent className="pt-6">
                   <div className="flex items-center gap-2 mb-3">
@@ -407,7 +392,7 @@ export default function PromptAnalyzerPage() {
               </Card>
             )}
 
-            {!analyzing && !result && !streamingText && (
+            {!analyzeThrottle.loading && !result && !streamingText && (
               <Card className="bg-slate-900/60 border-slate-700/50 backdrop-blur-sm">
                 <CardContent className="pt-6 pb-8 text-center">
                   <div className="p-4 rounded-2xl bg-slate-800/30 w-fit mx-auto mb-4">

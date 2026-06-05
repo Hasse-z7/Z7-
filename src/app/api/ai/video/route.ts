@@ -15,8 +15,9 @@ import { getAuthUser } from '@/lib/auth-helpers';
 import { deductCredits, refundCredits, recordTransaction, DEFAULT_CREDITS_PER_IMAGE, DEFAULT_CREDITS_PER_SECOND } from '@/lib/credits-helpers';
 import { isCircuitBreakerOpen } from '@/lib/ark-config';
 import { createClient } from '@supabase/supabase-js';
-import { acquireAISlot, releaseSlot } from '@/lib/rate-limiter';
+import { acquireAISlot, releaseSlot, checkUserCategoryRateLimit, getCategoryRateLimitMessage } from '@/lib/rate-limiter';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
 
 /** 检查系统开关 */
 async function isFeatureOpen(key: string): Promise<boolean> {
@@ -79,6 +80,10 @@ async function resolveModelEndpoint(modelId: string | undefined, category: strin
 }
 
 export async function POST(request: NextRequest) {
+  // IP限流：视频生成3次/分钟
+  const rateLimited = rateLimitResponse(request, 'video');
+  if (rateLimited) return rateLimited;
+
   try {
     // ========== 0. 系统开关检查 ==========
     const videoOpen = await isFeatureOpen('video_generation_open');
@@ -94,6 +99,15 @@ export async function POST(request: NextRequest) {
     const authResult = await getAuthUser(request);
     if (!authResult.user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
+    // 智能体侧用户分类限流：视频≤3次/分钟
+    const userCategoryCheck = checkUserCategoryRateLimit(authResult.user.id, 'video');
+    if (!userCategoryCheck.allowed) {
+      return NextResponse.json(
+        { error: getCategoryRateLimitMessage('video') },
+        { status: 429 }
+      );
     }
 
     // ========== 熔断检查 ==========

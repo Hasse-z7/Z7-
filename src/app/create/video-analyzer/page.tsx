@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { Textarea } from '@/components/ui/textarea';
 import { Upload, Video, Link, Copy, Check, Loader2, X, Play } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
@@ -15,7 +16,6 @@ export default function VideoAnalyzerPage() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [inputMode, setInputMode] = useState<'upload' | 'url'>('upload');
-  const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState('');
   const [uploading, setUploading] = useState(false);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
@@ -81,79 +81,64 @@ export default function VideoAnalyzerPage() {
     }
   };
 
-  const handleAnalyze = async () => {
-    if (!user) {
-      router.push('/login');
-      return;
-    }
+  // 限流：3秒冷却 + 请求中锁定
+  const analyzeThrottle = useActionThrottle(
+    async () => {
+      if (!user) { router.push('/login'); return; }
 
-    let url = '';
-    if (inputMode === 'upload') {
-      if (!videoFile) return;
-      const uploadedUrl = await uploadVideo();
-      if (!uploadedUrl) return;
-      url = uploadedUrl;
-    } else {
-      if (!videoUrl.trim()) return;
-      url = videoUrl.trim();
-    }
-
-    setAnalyzing(true);
-    setResult('');
-
-    try {
-      const token = localStorage.getItem('supabase_token') || '';
-      const res = await fetch('/api/ai/video-analyze', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-session': token,
-        },
-        body: JSON.stringify({ videoUrl: url }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || '解析失败');
+      let url = '';
+      if (inputMode === 'upload') {
+        if (!videoFile) return;
+        const uploadedUrl = await uploadVideo();
+        if (!uploadedUrl) return;
+        url = uploadedUrl;
+      } else {
+        if (!videoUrl.trim()) return;
+        url = videoUrl.trim();
       }
 
-      const reader = res.body?.getReader();
-      if (!reader) throw new Error('无法读取响应');
+      setResult('');
 
-      const decoder = new TextDecoder();
-      let fullText = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+      try {
+        const token = localStorage.getItem('supabase_token') || '';
+        const res = await fetch('/api/ai/video-analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-session': token },
+          body: JSON.stringify({ videoUrl: url }),
+        });
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6);
-            if (data === '[DONE]') break;
-            try {
-              const parsed = JSON.parse(data);
-              if (parsed.content) {
-                fullText += parsed.content;
-                setResult(fullText);
-              }
-              if (parsed.error) {
-                alert(parsed.error);
-              }
-            } catch {
-              // skip
+        if (res.status === 429) { alert('请求频繁，请稍后重试'); return; }
+        if (!res.ok) { const data = await res.json(); throw new Error(data.error || '解析失败'); }
+
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('无法读取响应');
+
+        const decoder = new TextDecoder();
+        let fullText = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+              if (data === '[DONE]') break;
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) { fullText += parsed.content; setResult(fullText); }
+                if (parsed.error) { alert(parsed.error); }
+              } catch { /* skip */ }
             }
           }
         }
+      } catch (err) {
+        console.error('Analyze error:', err);
+        alert(err instanceof Error ? err.message : '视频解析失败');
       }
-    } catch (err) {
-      console.error('Analyze error:', err);
-      alert(err instanceof Error ? err.message : '视频解析失败');
-    } finally {
-      setAnalyzing(false);
-    }
-  };
+    },
+    { cooldown: 3000 },
+  );
 
   const copySection = async (text: string, label: string) => {
     try {
@@ -303,18 +288,20 @@ export default function VideoAnalyzerPage() {
             <Button
               size="lg"
               className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium"
-              onClick={handleAnalyze}
+              onClick={() => analyzeThrottle.run()}
               disabled={
-                analyzing ||
+                analyzeThrottle.disabled ||
                 uploading ||
                 (inputMode === 'upload' ? !videoFile : !videoUrl.trim())
               }
             >
-              {analyzing ? (
+              {analyzeThrottle.loading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   正在解析视频...
                 </>
+              ) : analyzeThrottle.cooling ? (
+                `${analyzeThrottle.cooldownRemaining}秒后可再次解析`
               ) : uploading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -344,7 +331,7 @@ export default function VideoAnalyzerPage() {
 
           {/* Right: Result */}
           <div className="space-y-4">
-            {analyzing && !result ? (
+            {analyzeThrottle.loading && !result ? (
               <Card>
                 <CardContent className="p-8 flex flex-col items-center gap-4">
                   <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />

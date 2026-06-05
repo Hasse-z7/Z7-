@@ -5,7 +5,8 @@ import { generateImageViaDmxapi, generateImageViaMj, isDmxapiModel } from '@/lib
 import { HeaderUtils } from 'coze-coding-dev-sdk';
 import { deductCredits, refundCredits, recordTransaction, DEFAULT_CREDITS_PER_IMAGE } from '@/lib/credits-helpers';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
-import { acquireAISlot, releaseSlot } from '@/lib/rate-limiter';
+import { acquireAISlot, releaseSlot, checkUserCategoryRateLimit, getCategoryRateLimitMessage } from '@/lib/rate-limiter';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
 
 /** 检查系统开关 */
 async function isFeatureOpen(key: string): Promise<boolean> {
@@ -27,6 +28,10 @@ async function resolveProject(supabase: ReturnType<typeof getSupabaseClient> ext
 }
 
 export async function POST(request: NextRequest) {
+  // IP限流：图片生成10次/分钟
+  const rateLimited = rateLimitResponse(request, 'image');
+  if (rateLimited) return rateLimited;
+
   try {
     // 检查系统开关
     const imageOpen = await isFeatureOpen('image_generation_open');
@@ -41,6 +46,15 @@ export async function POST(request: NextRequest) {
     const authResult = await getAuthUser(request);
     if (!authResult.user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
+    // 智能体侧用户分类限流：出图≤10次/分钟
+    const userCategoryCheck = checkUserCategoryRateLimit(authResult.user.id, 'image');
+    if (!userCategoryCheck.allowed) {
+      return NextResponse.json(
+        { error: getCategoryRateLimitMessage('image') },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();

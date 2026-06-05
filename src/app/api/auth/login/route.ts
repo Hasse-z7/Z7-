@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
 
 /** 将手机号映射为虚拟邮箱，复用 Supabase 邮箱密码认证 */
 function phoneToVirtualEmail(phone: string): string {
@@ -7,6 +8,10 @@ function phoneToVirtualEmail(phone: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  // IP限流：登录5次/分钟
+  const rateLimited = rateLimitResponse(request, 'auth');
+  if (rateLimited) return rateLimited;
+
   try {
     const { phone, password } = await request.json();
 

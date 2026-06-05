@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LLMClient, Config, HeaderUtils, Message } from 'coze-coding-dev-sdk';
 import { getAuthUser } from '@/lib/auth-helpers';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
+import { checkUserCategoryRateLimit, getCategoryRateLimitMessage } from '@/lib/rate-limiter';
 
 const SYSTEM_PROMPT = `你是专业视频逆向解析师，依托多模态视觉能力，接收用户上传的视频，输出适配Seedance等AI视频生成工具的精准提示词。
 
@@ -37,10 +39,23 @@ xxx
 xxx`;
 
 export async function POST(request: NextRequest) {
+  // IP限流：视频反推5次/分钟（归入反推解析类）
+  const rateLimited = rateLimitResponse(request, 'analyze');
+  if (rateLimited) return rateLimited;
+
   try {
     const { user } = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
+    // 智能体侧用户分类限流：反推≤5次/分钟
+    const userCategoryCheck = checkUserCategoryRateLimit(user.id, 'prompt_analyze');
+    if (!userCategoryCheck.allowed) {
+      return NextResponse.json(
+        { error: getCategoryRateLimitMessage('prompt_analyze') },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();

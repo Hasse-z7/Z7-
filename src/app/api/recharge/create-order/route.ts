@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
 
 export async function POST(request: NextRequest) {
+  // IP限流：充值3次/分钟
+  const rateLimited = rateLimitResponse(request, 'recharge');
+  if (rateLimited) return rateLimited;
+
   try {
     const { user, supabase } = await getAuthUser(request);
     if (!user) {

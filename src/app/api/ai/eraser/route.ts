@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { LLMClient, Config, Message, HeaderUtils } from 'coze-coding-dev-sdk';
 import { generateImage } from '@/lib/coze-api';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
+import { checkUserCategoryRateLimit, getCategoryRateLimitMessage } from '@/lib/rate-limiter';
 import { getAuthUser } from '@/lib/auth-helpers';
 
 export async function POST(request: NextRequest) {
+  // IP限流：去水印5次/分钟
+  const rateLimited = rateLimitResponse(request, 'eraser');
+  if (rateLimited) return rateLimited;
+
   try {
     const { user } = await getAuthUser(request);
     if (!user) {
       return NextResponse.json({ error: '请先登录' }, { status: 401 });
+    }
+
+    // 智能体侧用户分类限流：修图去水印≤5次/分钟
+    const userCategoryCheck = checkUserCategoryRateLimit(user.id, 'eraser');
+    if (!userCategoryCheck.allowed) {
+      return NextResponse.json(
+        { error: getCategoryRateLimitMessage('eraser') },
+        { status: 429 }
+      );
     }
 
     const body = await request.json();

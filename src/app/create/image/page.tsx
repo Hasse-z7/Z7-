@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
+import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -293,83 +294,127 @@ export default function CreateImagePage() {
     }
   };
 
-  const handleGenerate = async (overridePrompt?: string) => {
-    if (!user) { router.push('/login'); return; }
-    const activePrompt = overridePrompt || prompt;
-    if (!activePrompt.trim()) return;
+  // 限流：3秒冷却 + 请求中锁定
+  const generateThrottle = useActionThrottle(
+    async () => {
+      if (!user) { router.push('/login'); return; }
+      const activePrompt = prompt;
+      if (typeof activePrompt !== 'string' || !activePrompt.trim()) return;
 
-    // Calculate dimensions from resolution + aspect ratio
+      // Calculate dimensions from resolution + aspect ratio
+      const { base } = resolutionMap[resolution];
+      const [rw, rh] = aspectRatioMap[aspectRatio] || [1, 1];
+      const maxDim = base;
+      const calculatedWidth = rw >= rh ? maxDim : Math.round(maxDim * (rw / rh));
+      const calculatedHeight = rh >= rw ? maxDim : Math.round(maxDim * (rh / rw));
+
+      // Get credits cost from selected model
+      const selectedModel = models.find(m => m.endpoint_id === selectedModelEndpoint);
+      const cost = selectedModel?.credits_cost || 2;
+      if ((profile?.credits || 0) < cost) {
+        router.push('/recharge');
+        return;
+      }
+
+      // Create task entry
+      const taskId = `img_${Date.now()}_${++taskIdCounter.current}`;
+      const newTask: ImageTask = {
+        id: taskId,
+        prompt: activePrompt,
+        status: 'generating',
+        resultUrl: '',
+        error: '',
+        workId: '',
+        editingPrompt: activePrompt,
+        isEditing: false,
+        createdAt: Date.now(),
+      };
+      setTasks(prev => [newTask, ...prev]);
+
+      // Clear persisted state for next input
+      setPrompt(''); clearPrompt();
+      if (refImageUrls.length > 0) { clearRefImages(); }
+
+      try {
+        const res = await fetch('/api/ai/image', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
+          body: JSON.stringify({ prompt: activePrompt, size: `${calculatedWidth}*${calculatedHeight}`, model_endpoint: selectedModelEndpoint, project_id: selectedProjectId || undefined, image_urls: refImageUrls.length > 0 ? refImageUrls : undefined }),
+        });
+        const data = await res.json();
+        if (res.status === 429) {
+          setTasks(prev => prev.map(t =>
+            t.id === taskId
+              ? { ...t, status: 'failed' as const, error: '请求频繁，请稍后重试' }
+              : t
+          ));
+          return;
+        }
+        const imageUrl = data.image_urls?.[0] || data.image_url;
+        if (imageUrl) {
+          setTasks(prev => prev.map(t =>
+            t.id === taskId
+              ? { ...t, status: 'succeeded' as const, resultUrl: imageUrl, workId: data.work_id || '', editingPrompt: activePrompt }
+              : t
+          ));
+          if (data.remaining_credits !== undefined) {
+            updateCredits(data.remaining_credits);
+          }
+          if (!selectedProjectId && data.work_id) {
+            setUnsavedWorkIds(prev => [...prev, data.work_id]);
+          }
+        } else {
+          setTasks(prev => prev.map(t =>
+            t.id === taskId
+              ? { ...t, status: 'failed' as const, error: data.error || '生成失败' }
+              : t
+          ));
+        }
+      } catch {
+        setTasks(prev => prev.map(t =>
+          t.id === taskId
+            ? { ...t, status: 'failed' as const, error: '生成失败，请重试' }
+            : t
+        ));
+      }
+    },
+    { cooldown: 3000 },
+  );
+
+  // 重试/重新生成也使用限流
+  const handleRegenerate = async (taskPrompt: string) => {
+    if (!user) { router.push('/login'); return; }
+    if (!taskPrompt.trim()) return;
     const { base } = resolutionMap[resolution];
     const [rw, rh] = aspectRatioMap[aspectRatio] || [1, 1];
     const maxDim = base;
     const calculatedWidth = rw >= rh ? maxDim : Math.round(maxDim * (rw / rh));
     const calculatedHeight = rh >= rw ? maxDim : Math.round(maxDim * (rh / rw));
-
-    // Check credits: 2算力点/张
-    const cost = 2;
-    if ((profile?.credits || 0) < cost) {
-      router.push('/recharge');
-      return;
-    }
-
-    // Create task entry
+    const selectedModel = models.find(m => m.endpoint_id === selectedModelEndpoint);
+    const cost = selectedModel?.credits_cost || 2;
+    if ((profile?.credits || 0) < cost) { router.push('/recharge'); return; }
     const taskId = `img_${Date.now()}_${++taskIdCounter.current}`;
-    const newTask: ImageTask = {
-      id: taskId,
-      prompt: activePrompt,
-      status: 'generating',
-      resultUrl: '',
-      error: '',
-      workId: '',
-      editingPrompt: activePrompt,
-      isEditing: false,
-      createdAt: Date.now(),
-    };
+    const newTask: ImageTask = { id: taskId, prompt: taskPrompt, status: 'generating', resultUrl: '', error: '', workId: '', editingPrompt: taskPrompt, isEditing: false, createdAt: Date.now() };
     setTasks(prev => [newTask, ...prev]);
-
-    // Clear persisted state for next input (only after generation starts)
-    if (!overridePrompt) { setPrompt(''); clearPrompt(); }
-    if (refImageUrls.length > 0) { clearRefImages(); }
-
     try {
       const res = await fetch('/api/ai/image', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getAuthHeaders(),
-        },
-        body: JSON.stringify({ prompt: activePrompt, size: `${calculatedWidth}*${calculatedHeight}`, model_endpoint: selectedModelEndpoint, project_id: selectedProjectId || undefined, image_urls: refImageUrls.length > 0 ? refImageUrls : undefined }),
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ prompt: taskPrompt, size: `${calculatedWidth}*${calculatedHeight}`, model_endpoint: selectedModelEndpoint, project_id: selectedProjectId || undefined }),
       });
       const data = await res.json();
+      if (res.status === 429) { setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'failed' as const, error: '请求频繁，请稍后重试' } : t)); return; }
       const imageUrl = data.image_urls?.[0] || data.image_url;
       if (imageUrl) {
-        setTasks(prev => prev.map(t =>
-          t.id === taskId
-            ? { ...t, status: 'succeeded' as const, resultUrl: imageUrl, workId: data.work_id || '', editingPrompt: activePrompt }
-            : t
-        ));
-        if (data.remaining_credits !== undefined) {
-          updateCredits(data.remaining_credits);
-        }
-        // 如果没有选择项目，记录为未保存作品
-        if (!selectedProjectId && data.work_id) {
-          setUnsavedWorkIds(prev => [...prev, data.work_id]);
-        }
-      } else {
-        setTasks(prev => prev.map(t =>
-          t.id === taskId
-            ? { ...t, status: 'failed' as const, error: data.error || '生成失败' }
-            : t
-        ));
-      }
-    } catch {
-      setTasks(prev => prev.map(t =>
-        t.id === taskId
-          ? { ...t, status: 'failed' as const, error: '生成失败，请重试' }
-          : t
-      ));
-    }
+        setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'succeeded' as const, resultUrl: imageUrl, workId: data.work_id || '' } : t));
+        if (data.remaining_credits !== undefined) updateCredits(data.remaining_credits);
+        if (!selectedProjectId && data.work_id) setUnsavedWorkIds(prev => [...prev, data.work_id]);
+      } else { setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'failed' as const, error: data.error || '生成失败' } : t)); }
+    } catch { setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'failed' as const, error: '生成失败，请重试' } : t)); }
   };
 
   // Task actions
@@ -395,12 +440,11 @@ export default function CreateImagePage() {
     ));
   };
 
-  const handleRegenerate = (taskId: string) => {
+  const handleRetryTask = (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
-    // Remove old task, generate with new prompt
     setTasks(prev => prev.filter(t => t.id !== taskId));
-    handleGenerate(task.prompt);
+    handleRegenerate(task.prompt);
   };
 
   const generatingCount = tasks.filter(t => t.status === 'generating').length;
@@ -605,11 +649,11 @@ export default function CreateImagePage() {
                 )}
                 <Button
                   className="w-full bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-medium"
-                  onClick={() => handleGenerate()}
-                  disabled={typeof prompt !== 'string' || !prompt.trim()}
+                  onClick={() => generateThrottle.run()}
+                  disabled={generateThrottle.disabled || typeof prompt !== 'string' || !prompt.trim()}
                 >
                   <Sparkles className="w-4 h-4 mr-2" />
-                  开始生成
+                  {generateThrottle.loading ? '生成中...' : generateThrottle.cooling ? `${generateThrottle.cooldownRemaining}秒后可再次生成` : '开始生成'}
                 </Button>
               </CardContent>
             </Card>
@@ -708,7 +752,7 @@ export default function CreateImagePage() {
                                 <Button
                                   size="sm" variant="ghost"
                                   className="h-7 text-xs text-violet-400 hover:text-violet-300"
-                                  onClick={() => handleRegenerate(task.id)}
+                                  onClick={() => handleRetryTask(task.id)}
                                 >
                                   <RefreshCw className="w-3.5 h-3.5 mr-1" />重新生成
                                 </Button>
@@ -733,7 +777,7 @@ export default function CreateImagePage() {
                                 <Button
                                   size="sm" variant="ghost"
                                   className="h-7 text-xs text-violet-400 hover:text-violet-300"
-                                  onClick={() => handleRegenerate(task.id)}
+                                  onClick={() => handleRetryTask(task.id)}
                                 >
                                   <RefreshCw className="w-3.5 h-3.5 mr-1" />重新生成
                                 </Button>

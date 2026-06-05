@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseClient } from '@/storage/database/supabase-client';
+import { rateLimitResponse } from '@/lib/ip-rate-limiter';
 
 export async function POST(request: NextRequest) {
+  const rateLimited = rateLimitResponse(request, 'auth');
+  if (rateLimited) return rateLimited;
   try {
     const { phone } = await request.json();
 
