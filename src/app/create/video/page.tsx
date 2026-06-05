@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
+import { usePersistedState } from '@/hooks/use-persisted-state';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -54,7 +55,7 @@ const videoRatios = [
 export default function CreateVideoPage() {
   const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt, clearPrompt] = usePersistedState('video-prompt', '');
   const [duration, setDuration] = useState(5);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [videoRatio, setVideoRatio] = useState<string>('16:9');
@@ -84,16 +85,16 @@ export default function CreateVideoPage() {
   // 未保存到项目的视频任务追踪
   const [unsavedTaskIds, setUnsavedTaskIds] = useState<string[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [refImageUrls, setRefImageUrls] = useState<string[]>([]);
-  const [audioUrl, setAudioUrl] = useState<string>('');
+  const [refImageUrls, setRefImageUrls, clearRefImages] = usePersistedState<string[]>('video-refImages', []);
+  const [audioUrl, setAudioUrl, clearAudioUrl] = usePersistedState<string>('video-audioUrl', '');
   const [uploadingFile, setUploadingFile] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   // First frame / Last frame for video generation
-  const [firstFrameUrl, setFirstFrameUrl] = useState<string>('');
-  const [lastFrameUrl, setLastFrameUrl] = useState<string>('');
+  const [firstFrameUrl, setFirstFrameUrl, clearFirstFrame] = usePersistedState<string>('video-firstFrame', '');
+  const [lastFrameUrl, setLastFrameUrl, clearLastFrame] = usePersistedState<string>('video-lastFrame', '');
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -441,8 +442,15 @@ export default function CreateVideoPage() {
     };
     setTasks(prev => [newTask, ...prev]);
 
-    // Clear prompt for next input
-    if (!overridePrompt) setPrompt('');
+    // Clear persisted state after successful submission
+    if (!overridePrompt) {
+      setPrompt('');
+      clearPrompt();
+      clearRefImages();
+      clearAudioUrl();
+      clearFirstFrame();
+      clearLastFrame();
+    }
 
     try {
       const res = await fetch('/api/ai/video', {

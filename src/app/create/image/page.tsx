@@ -72,13 +72,15 @@ const imageRatios = [
   ['21:9'],
 ];
 
+import { usePersistedState } from '@/hooks/use-persisted-state';
+
 export default function CreateImagePage() {
   const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
-  const [prompt, setPrompt] = useState('');
+  const [prompt, setPrompt, clearPrompt] = usePersistedState<string>('image_prompt', '');
   const [templates, setTemplates] = useState<Template[]>([]);
-  const [resolution, setResolution] = useState<'1K' | '2K' | '4K'>('2K');
-  const [aspectRatio, setAspectRatio] = useState<string>('自适应');
+  const [resolution, setResolution, clearResolution] = usePersistedState<'1K' | '2K' | '4K'>('image_resolution', '2K');
+  const [aspectRatio, setAspectRatio, clearAspectRatio] = usePersistedState<string>('image_aspect_ratio', '自适应');
   const [models, setModels] = useState<AIModel[]>([]);
   const [selectedModelEndpoint, setSelectedModelEndpoint] = useState<string>('');
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
@@ -91,7 +93,7 @@ export default function CreateImagePage() {
   // 未保存到项目的作品追踪
   const [unsavedWorkIds, setUnsavedWorkIds] = useState<string[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [refImageUrls, setRefImageUrls] = useState<string[]>([]);
+  const [refImageUrls, setRefImageUrls, clearRefImages] = usePersistedState<string[]>('image_ref_images', []);
   const [uploadingImage, setUploadingImage] = useState(false);
   const imgFileInputRef = useRef<HTMLInputElement>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
@@ -285,8 +287,9 @@ export default function CreateImagePage() {
     };
     setTasks(prev => [newTask, ...prev]);
 
-    // Clear prompt for next input
-    if (!overridePrompt) setPrompt('');
+    // Clear persisted state for next input (only after generation starts)
+    if (!overridePrompt) { setPrompt(''); clearPrompt(); }
+    if (refImageUrls.length > 0) { clearRefImages(); }
 
     try {
       const res = await fetch('/api/ai/image', {
