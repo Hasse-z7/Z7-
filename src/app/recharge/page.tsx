@@ -13,6 +13,7 @@ import {
   Zap, Check, CreditCard, QrCode, Upload, AlertCircle,
   ChevronLeft, Clock, ArrowUpRight, ArrowDownLeft, Gift, LogIn,
 } from 'lucide-react';
+import { QRCodeRenderer } from '@/components/qrcode-renderer';
 import Image from 'next/image';
 
 interface Package {
@@ -655,13 +656,8 @@ export default function RechargePage() {
                             支付宝扫码付款
                           </p>
                           <div className="flex flex-col items-center">
-                            <div className="relative w-52 h-52 border-2 border-dashed rounded-xl overflow-hidden border-blue-500/40 bg-white p-2">
-                              <Image
-                                src={alipayQRUrl}
-                                alt="支付宝付款码"
-                                fill
-                                className="object-contain"
-                              />
+                            <div className="w-52 h-52 border-2 border-dashed rounded-xl overflow-hidden border-blue-500/40 bg-white p-2 flex items-center justify-center">
+                              <QRCodeRenderer value={alipayQRUrl} size={190} />
                             </div>
                             {alipayPolling && (
                               <div className="mt-3 flex items-center gap-2 text-blue-400 text-sm">
