@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { ArrowLeft, FolderOpen, Image as ImageIcon, Video, Trash2, Download, MoreVertical, Pencil } from 'lucide-react';
-import Link from 'next/link';
+
 
 interface Project {
   id: string;
@@ -175,15 +175,7 @@ export default function ProjectDetailPage() {
           <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <FolderOpen className="w-16 h-16 mb-4 opacity-30" />
             <p className="text-lg mb-2">项目内暂无作品</p>
-            <p className="text-sm mb-4">前往AI生图或AI视频创作，作品会自动保存到此项目</p>
-            <div className="flex gap-3">
-              <Link href="/create/image" className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors text-sm">
-                AI生图
-              </Link>
-              <Link href="/create/video" className="px-4 py-2 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 transition-colors text-sm">
-                AI视频
-              </Link>
-            </div>
+            <p className="text-sm">在AI创作页面生成的内容会自动保存到此项目</p>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
