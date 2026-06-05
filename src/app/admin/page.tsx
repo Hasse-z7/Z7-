@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Users, CreditCard, Zap, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon, Settings
+  Users, CreditCard, Zap, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon, Settings, Bug
 } from 'lucide-react';
 
 interface Profile {
@@ -159,6 +159,7 @@ export default function AdminPage() {
             <TabsTrigger value="credits"><Zap className="w-4 h-4 mr-1" />算力</TabsTrigger>
             <TabsTrigger value="models"><Cpu className="w-4 h-4 mr-1" />模型</TabsTrigger>
             <TabsTrigger value="system"><Settings className="w-4 h-4 mr-1" />系统</TabsTrigger>
+            <TabsTrigger value="selftest"><Shield className="w-4 h-4 mr-1" />自检</TabsTrigger>
           </TabsList>
 
           <div className="mt-6 overflow-x-auto">
@@ -355,6 +356,33 @@ export default function AdminPage() {
           {/* 系统控制 */}
           {tab === 'system' && (
             <SystemControl />
+          )}
+
+          {/* 全功能自检 */}
+          {tab === 'selftest' && (
+            <div className="space-y-6">
+              <Card className="border-cyan-500/20 bg-slate-900/50 backdrop-blur">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Bug className="h-5 w-5 text-cyan-400" />
+                    全功能一键自检
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-400 mb-4">
+                    自动跑完全部7大模块测试：账号体系、AI绘图、AI视频、AI音乐、提示词反推、画面修复、算力充值。点击下方按钮启动，测试结果实时展示。
+                  </p>
+                  <Button
+                    size="lg"
+                    className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white"
+                    onClick={() => window.open('/admin/self-test', '_blank')}
+                  >
+                    <Bug className="h-4 w-4 mr-2" />
+                    打开自检工作台
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
           )}
         </Tabs>
       </div>
