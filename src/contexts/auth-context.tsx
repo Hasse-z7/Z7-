@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import { clearAllPersistedState } from '@/hooks/use-persisted-state';
 
 interface UserProfile {
   id: string;
@@ -165,6 +166,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Ignore
     }
     localStorage.removeItem(TOKEN_KEY);
+    clearAllPersistedState();
     setUser(null);
     setProfile(null);
     setToken(null);

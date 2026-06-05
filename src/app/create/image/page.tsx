@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -11,18 +11,8 @@ import {
   Download, Sparkles, Loader2,
   ChevronDown, FolderPlus,
   RefreshCw, Pencil, Check, Trash2, Clock, CheckCircle2, XCircle, X,
-  Upload, ImagePlus, Plus
+  Upload, ImagePlus, Plus, ArrowLeft,
 } from 'lucide-react';
-
-interface Template {
-  id: string;
-  name: string;
-  sub_category: string;
-  description: string;
-  prompt_template: string;
-  credits_cost: number;
-  is_vip_only: boolean;
-}
 
 interface AIModel {
   id: string;
@@ -77,14 +67,15 @@ import { usePersistedState } from '@/hooks/use-persisted-state';
 export default function CreateImagePage() {
   const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
-  const [prompt, setPrompt, clearPrompt] = usePersistedState<string>('image_prompt', '');
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const searchParams = useSearchParams();
+  const projectIdFromUrl = searchParams.get('project_id');
+  const [prompt, setPrompt, clearPrompt, persistPrompt] = usePersistedState<string>('image_prompt', '');
   const [resolution, setResolution, clearResolution] = usePersistedState<'1K' | '2K' | '4K'>('image_resolution', '2K');
   const [aspectRatio, setAspectRatio, clearAspectRatio] = usePersistedState<string>('image_aspect_ratio', '自适应');
   const [models, setModels] = useState<AIModel[]>([]);
   const [selectedModelEndpoint, setSelectedModelEndpoint] = useState<string>('');
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(projectIdFromUrl || '');
 
   // Multi-task queue
   const [tasks, setTasks] = useState<ImageTask[]>([]);
@@ -93,26 +84,12 @@ export default function CreateImagePage() {
   // 未保存到项目的作品追踪
   const [unsavedWorkIds, setUnsavedWorkIds] = useState<string[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const [refImageUrls, setRefImageUrls, clearRefImages] = usePersistedState<string[]>('image_ref_images', []);
+  const [refImageUrls, setRefImageUrls, clearRefImages, persistRefImages] = usePersistedState<string[]>('image_ref_images', []);
   const [uploadingImage, setUploadingImage] = useState(false);
   const imgFileInputRef = useRef<HTMLInputElement>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  const fetchTemplates = useCallback(async () => {
-    try {
-      const res = await fetch('/api/templates?category=image');
-      const data = await res.json();
-      if (data.templates) setTemplates(data.templates);
-    } catch (err) {
-      console.error('Fetch templates error:', err);
-    }
-  }, []);
-
-  const handleSelectTemplate = (tpl: Template) => {
-    setPrompt(tpl.prompt_template);
-  };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -172,13 +149,14 @@ export default function CreateImagePage() {
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
-        const saved = localStorage.getItem('selectedProjectId_image');
-        if (saved) setSelectedProjectId(saved);
+        if (projectIdFromUrl) {
+          setSelectedProjectId(projectIdFromUrl);
+        }
       }
     } catch (err) {
       console.error('Fetch projects error:', err);
     }
-  }, []);
+  }, [projectIdFromUrl]);
 
   const fetchExistingWorks = useCallback(async () => {
     try {
@@ -207,7 +185,7 @@ export default function CreateImagePage() {
     }
   }, []);
 
-  useEffect(() => { fetchTemplates(); fetchModels(); fetchProjects(); fetchExistingWorks(); }, [fetchTemplates, fetchModels, fetchProjects, fetchExistingWorks]);
+  useEffect(() => { fetchModels(); fetchProjects(); fetchExistingWorks(); }, [fetchModels, fetchProjects, fetchExistingWorks]);
 
   // 离开页面保护：有未保存作品时提示
   const hasUnsavedWork = unsavedWorkIds.length > 0;
@@ -392,53 +370,47 @@ export default function CreateImagePage() {
 
   const generatingCount = tasks.filter(t => t.status === 'generating').length;
 
+  // 返回按钮：保存当前内容到localStorage，3分钟有效期
+  const handleBack = () => {
+    persistPrompt();
+    persistRefImages();
+    if (selectedProjectId) {
+      router.push(`/projects/${selectedProjectId}`);
+    } else {
+      router.push('/projects');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
-            AI生图
-          </h1>
-          <p className="text-muted-foreground mt-2">文字描述生成精美图片，支持多种风格和创作模式</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-400 to-purple-400 bg-clip-text text-transparent">
+                AI生图
+              </h1>
+              <p className="text-muted-foreground mt-1">文字描述生成精美图片，支持多种风格和创作模式</p>
+            </div>
+          </div>
+          {/* 项目选择器 */}
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2 pr-8 text-sm text-foreground max-w-[200px] truncate"
+            >
+              <option value="">选择项目</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* 未创建项目时显示新建项目引导 */}
-        {!selectedProjectId ? (
-          <Card className="border-border/50 bg-card/50 backdrop-blur">
-            <CardContent className="py-16 flex flex-col items-center justify-center text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-violet-500/20 to-purple-500/20 flex items-center justify-center mb-6">
-                <Plus className="w-10 h-10 text-violet-400" />
-              </div>
-              <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
-              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI创作，所有生成的作品将保存在项目中</p>
-              <Button
-                onClick={async () => {
-                  const now = new Date();
-                  const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}图片项目`;
-                  try {
-                    const res = await fetch('/api/projects', {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-                      body: JSON.stringify({ name: dateName }),
-                    });
-                    const data = await res.json();
-                    if (data.project) {
-                      setSelectedProjectId(data.project.id);
-                      localStorage.setItem('selectedProjectId_image', data.project.id);
-                      fetchProjects();
-                    }
-                  } catch (e) {
-                    console.error('创建项目失败:', e);
-                  }
-                }}
-                className="bg-gradient-to-r from-violet-500 to-purple-500 hover:from-violet-600 hover:to-purple-600 text-white px-8 py-3 text-base"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                新建图片项目
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Controls */}
           <div className="lg:col-span-2 space-y-6">
@@ -771,31 +743,8 @@ export default function CreateImagePage() {
                 ))}
               </CardContent>
             </Card>
-
-            <h3 className="text-lg font-semibold">推荐模板</h3>
-            {templates.map((tpl) => (
-              <Card
-                key={tpl.id}
-                className="cursor-pointer border-border/50 hover:border-violet-500/30 transition-all hover:-translate-y-0.5"
-                onClick={() => handleSelectTemplate(tpl)}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium text-sm">{tpl.name}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{tpl.description}</p>
-                    </div>
-                    {tpl.is_vip_only && (
-                      <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs shrink-0 ml-2">VIP</Badge>
-                    )}
-                  </div>
-                  <div className="text-xs text-cyan-400 mt-2">{tpl.credits_cost} 算力点</div>
-                </CardContent>
-              </Card>
-            ))}
           </div>
         </div>
-        )}
 
         {/* 未保存作品提示栏 */}
         {hasUnsavedWork && !showSaveDialog && (

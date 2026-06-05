@@ -2,25 +2,16 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import {
-  Sparkles, Loader2, Volume2, Download, Plus, FolderPlus
+  Sparkles, Loader2, Volume2, Download, ArrowLeft
 } from 'lucide-react';
-
-interface Template {
-  id: string;
-  name: string;
-  sub_category: string;
-  description: string;
-  prompt_template: string;
-  credits_cost: number;
-  is_vip_only: boolean;
-}
+import { usePersistedState } from '@/hooks/use-persisted-state';
 
 interface MusicWork {
   id: string;
@@ -41,30 +32,22 @@ const musicStyles = [
 export default function CreateMusicPage() {
   const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
-  const [prompt, setPrompt] = useState('');
-  const [lyrics, setLyrics] = useState('');
+  const searchParams = useSearchParams();
+  const projectIdFromUrl = searchParams.get('project_id') || '';
+
+  const [prompt, setPrompt] = usePersistedState<string>('music_prompt', '');
+  const [lyrics, setLyrics] = usePersistedState<string>('music_lyrics', '');
   const [selectedStyle, setSelectedStyle] = useState('pop');
   const [loading, setLoading] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
   const [resultLyrics, setResultLyrics] = useState('');
-  const [templates, setTemplates] = useState<Template[]>([]);
 
   // Project selection
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
+  const [selectedProjectId, setSelectedProjectId] = useState<string>(projectIdFromUrl);
 
   // History works
   const [historyWorks, setHistoryWorks] = useState<MusicWork[]>([]);
-
-  const fetchTemplates = useCallback(async () => {
-    try {
-      const res = await fetch('/api/templates?category=music');
-      const data = await res.json();
-      if (data.templates) setTemplates(data.templates);
-    } catch (err) {
-      console.error(err);
-    }
-  }, []);
 
   const fetchProjects = useCallback(async () => {
     try {
@@ -72,7 +55,7 @@ export default function CreateMusicPage() {
       const data = await res.json();
       if (data.projects) {
         setProjects(data.projects);
-        const saved = localStorage.getItem('selectedProjectId_music');
+        const saved = projectIdFromUrl || localStorage.getItem('selectedProjectId_music');
         if (saved && data.projects.some((p: { id: string }) => p.id === saved)) {
           setSelectedProjectId(saved);
         }
@@ -80,7 +63,7 @@ export default function CreateMusicPage() {
     } catch (err) {
       console.error('Fetch projects error:', err);
     }
-  }, []);
+  }, [projectIdFromUrl]);
 
   const fetchExistingWorks = useCallback(async () => {
     try {
@@ -95,10 +78,9 @@ export default function CreateMusicPage() {
   }, []);
 
   useEffect(() => {
-    fetchTemplates();
     fetchProjects();
     fetchExistingWorks();
-  }, [fetchTemplates, fetchProjects, fetchExistingWorks]);
+  }, [fetchProjects, fetchExistingWorks]);
 
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
@@ -137,67 +119,47 @@ export default function CreateMusicPage() {
     }
   };
 
-  const handleCreateProject = async () => {
-    const now = new Date();
-    const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}音乐项目`;
-    try {
-      const res = await fetch('/api/projects', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ name: dateName }),
-      });
-      const data = await res.json();
-      if (data.project) {
-        setSelectedProjectId(data.project.id);
-        localStorage.setItem('selectedProjectId_music', data.project.id);
-        fetchProjects();
-      }
-    } catch (e) {
-      console.error('创建项目失败:', e);
+  // 返回按钮：保存当前内容到localStorage，3分钟有效期
+  const handleBack = () => {
+    if (selectedProjectId) {
+      router.push(`/projects/${selectedProjectId}`);
+    } else {
+      router.push('/projects');
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
-            AI音乐创作
-          </h1>
-          <p className="text-muted-foreground mt-2">文字生成歌曲、AI伴奏、多曲风切换</p>
+        <div className="mb-8 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0">
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <div>
+              <h1 className="text-3xl font-bold bg-gradient-to-r from-rose-400 to-pink-400 bg-clip-text text-transparent">
+                AI音乐创作
+              </h1>
+              <p className="text-muted-foreground mt-1">文字生成歌曲、AI伴奏、多曲风切换</p>
+            </div>
+          </div>
+          {/* 项目选择器 */}
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              className="appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2 pr-8 text-sm text-foreground max-w-[200px] truncate"
+            >
+              <option value="">选择项目</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
-        {/* 未创建项目时显示新建项目引导 */}
-        {!selectedProjectId ? (
-          <Card className="border-border/50 bg-card/50 backdrop-blur">
-            <CardContent className="py-16 flex flex-col items-center justify-center text-center">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-rose-500/20 to-pink-500/20 flex items-center justify-center mb-6">
-                <Plus className="w-10 h-10 text-rose-400" />
-              </div>
-              <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
-              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI音乐创作，所有生成的作品将保存在项目中</p>
-              <Button
-                onClick={handleCreateProject}
-                className="bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white px-8 py-3 text-base"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                新建音乐项目
-              </Button>
-            </CardContent>
-          </Card>
-        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
-            {/* Project bar */}
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <FolderPlus className="w-4 h-4" />
-              <span>当前项目：{projects.find(p => p.id === selectedProjectId)?.name || '未命名'}</span>
-              <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={() => {
-                setSelectedProjectId('');
-                localStorage.removeItem('selectedProjectId_music');
-              }}>切换项目</Button>
-            </div>
-
             {/* Style Selection */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
@@ -321,28 +283,16 @@ export default function CreateMusicPage() {
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">音乐模板</h3>
-            {templates.map((tpl) => (
-              <Card
-                key={tpl.id}
-                className="cursor-pointer border-border/50 hover:border-rose-500/30 transition-all hover:-translate-y-0.5"
-                onClick={() => { setPrompt(tpl.prompt_template); setSelectedStyle(tpl.sub_category); }}
-              >
-                <CardContent className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium text-sm">{tpl.name}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{tpl.description}</p>
-                    </div>
-                    {tpl.is_vip_only && <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs shrink-0 ml-2">VIP</Badge>}
-                  </div>
-                  <div className="text-xs mt-2">{(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-xs">VIP</Badge>}</div>
-                </CardContent>
-              </Card>
-            ))}
+            <Card className="border-border/50">
+              <CardContent className="p-4">
+                <p className="text-sm text-muted-foreground">
+                  选择曲风并描述你想要的音乐，AI将为你生成独一无二的作品。
+                  每首音乐消耗10算力点。
+                </p>
+              </CardContent>
+            </Card>
           </div>
         </div>
-        )}
       </div>
     </div>
   );

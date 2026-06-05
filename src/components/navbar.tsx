@@ -4,10 +4,11 @@ import { useAuth } from '@/contexts/auth-context';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Sparkles, Video, Music, UserRound, CreditCard, LogOut,
-  Sun, Moon, Search, Menu, X, FolderOpen, Crown, History, Trash2
+  Sun, Moon, Search, Menu, X, FolderOpen, Crown, History, Trash2,
+  ChevronRight, Home,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,72 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+
+// 路径映射表
+const pathNameMap: Record<string, string> = {
+  '/projects': '我的项目',
+  '/create/image': 'AI生图',
+  '/create/video': 'AI视频',
+  '/create/music': 'AI音乐',
+  '/create/digital-human': 'AI数字人',
+  '/dashboard': '个人中心',
+  '/dashboard/profile': '个人资料',
+  '/recharge': '充值中心',
+  '/membership': '会员权益',
+  '/my-works': '我的作品',
+  '/login': '登录',
+  '/register': '注册',
+};
+
+function Breadcrumb() {
+  const pathname = usePathname();
+  
+  const crumbs = useMemo(() => {
+    // 特殊处理项目详情页
+    if (pathname.startsWith('/projects/') && pathname !== '/projects') {
+      return [
+        { label: '我的项目', href: '/projects' },
+        { label: '项目详情', href: pathname },
+      ];
+    }
+    
+    const parts = pathname.split('/').filter(Boolean);
+    const result: { label: string; href: string }[] = [];
+    let currentPath = '';
+    
+    for (const part of parts) {
+      currentPath += `/${part}`;
+      const name = pathNameMap[currentPath];
+      if (name) {
+        result.push({ label: name, href: currentPath });
+      }
+    }
+    
+    return result;
+  }, [pathname]);
+
+  if (crumbs.length <= 1) return null;
+
+  return (
+    <nav className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+      <Link href="/" className="hover:text-foreground transition-colors">
+        <Home className="h-3 w-3" />
+      </Link>
+      {crumbs.map((crumb, i) => (
+        <span key={crumb.href} className="flex items-center gap-1">
+          <ChevronRight className="h-3 w-3" />
+          {i < crumbs.length - 1 ? (
+            <Link href={crumb.href} className="hover:text-foreground transition-colors">
+              {crumb.label}
+            </Link>
+          ) : (
+            <span className="text-foreground font-medium">{crumb.label}</span>
+          )}
+        </span>
+      ))}
+    </nav>
+  );
+}
 
 export default function Navbar() {
   const { user, profile, logout } = useAuth();
@@ -65,13 +132,16 @@ export default function Navbar() {
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2 shrink-0">
-          <img src="/logo.png" alt="燃冬AI" className="h-8 w-8 rounded-lg object-cover" />
-          <span className="font-bold text-lg bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent hidden sm:inline">
-            燃冬AI
-          </span>
-        </Link>
+        {/* Logo + Breadcrumb */}
+        <div className="flex flex-col shrink-0">
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="燃冬AI" className="h-8 w-8 rounded-lg object-cover" />
+            <span className="font-bold text-lg bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent hidden sm:inline">
+              燃冬AI
+            </span>
+          </Link>
+          <Breadcrumb />
+        </div>
 
         {/* Desktop Nav */}
         <nav className="hidden md:flex items-center gap-1 mx-4">

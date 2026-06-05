@@ -5,7 +5,7 @@ import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import {
   FolderOpen, Plus, Pencil, Trash2, Image, Video, Loader2,
-  FolderInput, ImageIcon, MoreVertical, ExternalLink,
+  FolderInput, ImageIcon, MoreVertical, ExternalLink, Music, Mic,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,12 +37,11 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [renameOpen, setRenameOpen] = useState(false);
-  const [coverOpen, setCoverOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [newName, setNewName] = useState('');
-  const [coverUrl, setCoverUrl] = useState('');
   const [selectedProject, setSelectedProject] = useState<Project | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [nameError, setNameError] = useState('');
 
   // 右键菜单
   const [contextMenu, setContextMenu] = useState<{
@@ -81,14 +80,22 @@ export default function ProjectsPage() {
     return () => document.removeEventListener('click', handleClick);
   }, []);
 
+  // 生成默认项目名
+  const getDefaultProjectName = () => {
+    const now = new Date();
+    const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+    return `${dateStr}项目`;
+  };
+
   const handleCreate = async () => {
-    if (!newName.trim()) return;
+    const nameToUse = newName.trim() || getDefaultProjectName();
     setSubmitting(true);
+    setNameError('');
     try {
       const res = await fetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ name: newName.trim() }),
+        body: JSON.stringify({ name: nameToUse }),
       });
       if (res.ok) {
         setCreateOpen(false);
@@ -96,7 +103,11 @@ export default function ProjectsPage() {
         fetchProjects();
       } else {
         const data = await res.json();
-        alert(data.error || '创建失败');
+        if (res.status === 409) {
+          setNameError('项目名称已存在，请使用其他名称');
+        } else {
+          setNameError(data.error || '创建失败');
+        }
       }
     } finally {
       setSubmitting(false);
@@ -120,29 +131,6 @@ export default function ProjectsPage() {
       } else {
         const data = await res.json();
         alert(data.error || '重命名失败');
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleCoverUpdate = async () => {
-    if (!selectedProject) return;
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/projects?id=${selectedProject.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
-        body: JSON.stringify({ cover_url: coverUrl.trim() || null }),
-      });
-      if (res.ok) {
-        setCoverOpen(false);
-        setCoverUrl('');
-        setSelectedProject(null);
-        fetchProjects();
-      } else {
-        const data = await res.json();
-        alert(data.error || '修改封面失败');
       }
     } finally {
       setSubmitting(false);
@@ -180,12 +168,6 @@ export default function ProjectsPage() {
     setRenameOpen(true);
   };
 
-  const openCoverChange = (project: Project) => {
-    setSelectedProject(project);
-    setCoverUrl(project.cover_url || '');
-    setCoverOpen(true);
-  };
-
   const openDelete = (project: Project) => {
     setSelectedProject(project);
     setDeleteOpen(true);
@@ -211,78 +193,104 @@ export default function ProjectsPage() {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-5xl">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <FolderOpen className="h-8 w-8 text-sky-500" />
-          <h1 className="text-2xl font-bold">项目管理</h1>
-        </div>
-        <Button onClick={() => { setNewName(''); setCreateOpen(true); }}>
-          <Plus className="h-4 w-4 mr-1" /> 新建项目
-        </Button>
+      <div className="mb-8">
+        <h1 className="text-2xl font-bold">我的项目</h1>
+        <p className="text-muted-foreground mt-1">管理你的创作项目</p>
       </div>
 
-      {projects.length === 0 ? (
-        <div className="text-center py-20 text-muted-foreground">
-          <FolderOpen className="h-16 w-16 mx-auto mb-4 opacity-30" />
-          <p>暂无项目，生成图片或视频时将自动创建</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          {projects.map((project) => {
-            const cover = getCoverImage(project);
-            return (
-              <Card
-                key={project.id}
-                className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 overflow-hidden"
-                onClick={() => openProject(project)}
-                onContextMenu={(e) => handleContextMenu(e, project)}
-              >
-                {/* 封面区域 */}
-                <div className="aspect-[4/3] relative bg-muted/30 overflow-hidden">
-                  {cover ? (
-                    <img
-                      src={cover}
-                      alt={project.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <FolderInput className="h-12 w-12 text-muted-foreground/30" />
-                    </div>
-                  )}
-                  {/* 悬浮遮罩 */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center">
-                    <ExternalLink className="h-8 w-8 text-white opacity-0 group-hover:opacity-80 transition-opacity duration-300" />
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+        {/* 新建项目 - 始终在第一个位置 */}
+        <Card
+          className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 overflow-hidden border-dashed border-2 border-cyan-500/30 hover:border-cyan-500/60 bg-card/30 hover:bg-cyan-500/5"
+          onClick={() => { setNewName(getDefaultProjectName()); setNameError(''); setCreateOpen(true); }}
+        >
+          <div className="aspect-[4/3] flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-14 h-14 rounded-full bg-cyan-500/10 flex items-center justify-center group-hover:bg-cyan-500/20 transition-colors">
+                <Plus className="w-7 h-7 text-cyan-400" />
+              </div>
+              <span className="text-cyan-400 font-medium text-sm">新建项目</span>
+              <span className="text-muted-foreground text-xs">创建新的创作项目</span>
+            </div>
+          </div>
+        </Card>
+
+        {/* 已有项目列表 */}
+        {projects.map((project) => {
+          const cover = getCoverImage(project);
+          return (
+            <Card
+              key={project.id}
+              className="group cursor-pointer hover:shadow-lg transition-all duration-300 hover:-translate-y-0.5 overflow-hidden"
+              onClick={() => openProject(project)}
+              onContextMenu={(e) => handleContextMenu(e, project)}
+            >
+              {/* 封面区域 */}
+              <div className="aspect-[4/3] relative bg-muted/30 overflow-hidden">
+                {cover ? (
+                  <img
+                    src={cover}
+                    alt={project.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center">
+                    <FolderInput className="h-12 w-12 text-muted-foreground/30" />
                   </div>
-                  {/* 右上角更多按钮 */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="absolute top-1 right-1 h-7 w-7 bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const rect = (e.target as HTMLElement).getBoundingClientRect();
-                      setContextMenu({ x: rect.left, y: rect.bottom, project });
-                    }}
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </Button>
+                )}
+                {/* 悬浮遮罩 */}
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors duration-300 flex items-center justify-center">
+                  <ExternalLink className="h-8 w-8 text-white opacity-0 group-hover:opacity-80 transition-opacity duration-300" />
                 </div>
-                {/* 信息区域 */}
-                <CardContent className="p-3">
-                  <h3 className="font-semibold text-sm truncate">{project.name}</h3>
-                  <div className="flex gap-3 text-xs text-muted-foreground mt-1.5">
-                    <span className="flex items-center gap-0.5">
-                      <Image className="h-3 w-3" />{project.image_count}
-                    </span>
-                    <span className="flex items-center gap-0.5">
-                      <Video className="h-3 w-3" />{project.video_count}
-                    </span>
+                {/* 右上角更多按钮 */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute top-1 right-1 h-7 w-7 bg-black/40 hover:bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openProject(project);
+                  }}
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+                {/* 作品计数 */}
+                {(project.image_count > 0 || project.video_count > 0) && (
+                  <div className="absolute bottom-1 left-1 flex gap-1">
+                    {project.image_count > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-black/50 text-white flex items-center gap-0.5 backdrop-blur-sm">
+                        <ImageIcon className="w-2.5 h-2.5" />{project.image_count}
+                      </span>
+                    )}
+                    {project.video_count > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-black/50 text-white flex items-center gap-0.5 backdrop-blur-sm">
+                        <Video className="w-2.5 h-2.5" />{project.video_count}
+                      </span>
+                    )}
                   </div>
-                </CardContent>
-              </Card>
-            );
-          })}
+                )}
+              </div>
+              {/* 信息区域 */}
+              <CardContent className="p-3">
+                <h3 className="font-semibold text-sm truncate">{project.name}</h3>
+                <div className="flex gap-3 text-xs text-muted-foreground mt-1.5">
+                  <span className="flex items-center gap-0.5">
+                    <Image className="h-3 w-3" />{project.image_count}
+                  </span>
+                  <span className="flex items-center gap-0.5">
+                    <Video className="h-3 w-3" />{project.video_count}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+
+      {/* 空状态提示 - 没有项目时显示 */}
+      {projects.length === 0 && (
+        <div className="text-center py-8 text-muted-foreground">
+          <p>点击上方卡片创建你的第一个项目</p>
         </div>
       )}
 
@@ -306,12 +314,6 @@ export default function ProjectsPage() {
           >
             <Pencil className="h-4 w-4" /> 重命名
           </button>
-          <button
-            className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-accent transition-colors"
-            onClick={() => { openCoverChange(contextMenu.project); setContextMenu(null); }}
-          >
-            <ImageIcon className="h-4 w-4" /> 修改封面
-          </button>
           <div className="my-1 h-px bg-border" />
           <button
             className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
@@ -322,24 +324,25 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {/* 创建项目对话框 */}
+      {/* 创建项目对话框 - 保存/取消按钮 */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>新建项目</DialogTitle>
-            <DialogDescription>输入项目名称，创建后可在生图/生视频时选择</DialogDescription>
+            <DialogDescription>输入项目名称，或使用默认名称直接保存</DialogDescription>
           </DialogHeader>
           <Input
-            placeholder="项目名称"
+            placeholder={getDefaultProjectName()}
             value={newName}
-            onChange={(e) => setNewName(e.target.value)}
+            onChange={(e) => { setNewName(e.target.value); setNameError(''); }}
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           />
+          {nameError && <p className="text-sm text-destructive">{nameError}</p>}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateOpen(false)}>取消</Button>
-            <Button onClick={handleCreate} disabled={!newName.trim() || submitting}>
+            <Button variant="outline" onClick={() => { setCreateOpen(false); setNewName(''); setNameError(''); }}>取消</Button>
+            <Button onClick={handleCreate} disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              创建
+              保存
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -361,33 +364,6 @@ export default function ProjectsPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameOpen(false)}>取消</Button>
             <Button onClick={handleRename} disabled={!newName.trim() || submitting}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              保存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 修改封面对话框 */}
-      <Dialog open={coverOpen} onOpenChange={setCoverOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>修改项目封面</DialogTitle>
-            <DialogDescription>输入图片URL作为项目封面，留空则使用项目内第一张作品作为封面</DialogDescription>
-          </DialogHeader>
-          <Input
-            placeholder="图片URL（留空使用默认封面）"
-            value={coverUrl}
-            onChange={(e) => setCoverUrl(e.target.value)}
-          />
-          {coverUrl && (
-            <div className="mt-2 rounded-lg overflow-hidden border aspect-[4/3] bg-muted/30">
-              <img src={coverUrl} alt="封面预览" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCoverOpen(false)}>取消</Button>
-            <Button onClick={handleCoverUpdate} disabled={submitting}>
               {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
               保存
             </Button>
