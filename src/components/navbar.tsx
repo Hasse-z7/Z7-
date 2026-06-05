@@ -171,7 +171,7 @@ export default function Navbar() {
                   <Crown className="mr-2 h-4 w-4" />会员权益
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={logout} className="text-red-500">
+                <DropdownMenuItem onClick={async () => { await logout(); router.push('/login'); }} className="text-red-500">
                   <LogOut className="mr-2 h-4 w-4" />退出登录
                 </DropdownMenuItem>
               </DropdownMenuContent>
