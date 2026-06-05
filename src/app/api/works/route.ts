@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const workType = searchParams.get('type');
     const projectId = searchParams.get('project_id');
+    const unassigned = searchParams.get('unassigned') === 'true';
     const trash = searchParams.get('trash') === 'true';
 
     let query = supabase
@@ -55,6 +56,10 @@ export async function GET(request: NextRequest) {
 
     if (projectId) {
       query = query.eq('project_id', projectId);
+    }
+
+    if (unassigned) {
+      query = query.is('project_id', null);
     }
 
     if (trash) {

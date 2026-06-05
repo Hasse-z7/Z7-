@@ -109,7 +109,7 @@ export default function CreateDigitalHumanPage() {
 
   const fetchExistingWorks = useCallback(async () => {
     try {
-      const res = await fetch('/api/works?type=digital_human', { headers: getAuthHeaders() });
+      const res = await fetch('/api/works?type=digital_human&unassigned=true', { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.works) {
         setHistoryWorks(data.works);

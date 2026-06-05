@@ -84,7 +84,7 @@ export default function CreateMusicPage() {
 
   const fetchExistingWorks = useCallback(async () => {
     try {
-      const res = await fetch('/api/works?type=music', { headers: getAuthHeaders() });
+      const res = await fetch('/api/works?type=music&unassigned=true', { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.works) {
         setHistoryWorks(data.works);

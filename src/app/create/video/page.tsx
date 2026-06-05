@@ -143,7 +143,7 @@ export default function CreateVideoPage() {
   // Load existing video works from database on mount
   const fetchExistingWorks = useCallback(async () => {
     try {
-      const res = await fetch('/api/works?type=video', { headers: getAuthHeaders() });
+      const res = await fetch('/api/works?type=video&unassigned=true', { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.works && data.works.length > 0) {
         const existingTasks: VideoTask[] = data.works.map((w: Record<string, string>) => ({
@@ -224,6 +224,8 @@ export default function CreateVideoPage() {
       });
       const data = await res.json();
       if (data.success) {
+        // 从任务列表中移除已保存的视频任务
+        setTasks(prev => prev.filter(t => !unsavedTaskIds.includes(t.id)));
         setUnsavedTaskIds([]);
         fetchProjects();
         if (data.project_id) {

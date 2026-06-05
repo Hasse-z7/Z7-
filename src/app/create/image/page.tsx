@@ -182,7 +182,7 @@ export default function CreateImagePage() {
 
   const fetchExistingWorks = useCallback(async () => {
     try {
-      const res = await fetch('/api/works?type=image', { headers: getAuthHeaders() });
+      const res = await fetch('/api/works?type=image&unassigned=true', { headers: getAuthHeaders() });
       const data = await res.json();
       if (data.works && data.works.length > 0) {
         const existingTasks: ImageTask[] = data.works.map((w: Record<string, string>) => ({
@@ -249,6 +249,8 @@ export default function CreateImagePage() {
       });
       const data = await res.json();
       if (data.success) {
+        // 从任务列表中移除已保存的作品
+        setTasks(prev => prev.filter(t => !unsavedWorkIds.includes(t.workId)));
         setUnsavedWorkIds([]);
         fetchProjects();
         if (data.project_id) {
