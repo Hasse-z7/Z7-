@@ -1,19 +1,25 @@
 /**
  * AI 请求并发控制和速率限制
  *
- * 目标：支持30-50人同时使用AI功能（5 DMXAPI Key）
+ * 目标：支持100人同时使用AI功能（5 DMXAPI Key + 动态Key扩展）
  * 容量规划：
  *   - Coze平台(1 Key): ~5 QPS → ~300 RPM
- *   - DMXAPI(5 Keys):  ~25 QPS → ~1500 RPM
- *   - 合计吞吐: ~30 QPS → ~1800 RPM
+ *   - DMXAPI(5+ Keys): ~25+ QPS → ~1500+ RPM
+ *   - 合计吞吐: ~30+ QPS → ~1800+ RPM
+ *   - 100人场景：人均1次/30s → ~200 RPM峰值，当前Key配置可覆盖
+ *
+ * 扩容路径：
+ *   - 50人: 5 DMXAPI Key 足够
+ *   - 100人: 需8-10 DMXAPI Key + 5-6 ARK Key（仅改环境变量，代码自动轮转）
  *
  * 策略：
  *   1. 并发槽位控制 - 限制同时在处理的AI请求数
  *   2. 速率限制 - 每分钟请求数上限
  *   3. 排队机制 - 超出并发限制的请求进入队列
- *   4. 多KEY轮转 - dmxapi.cn支持多KEY提高吞吐（5 Key轮转负载均衡）
+ *   4. 多KEY轮转 - dmxapi.cn支持多KEY提高吞吐（自动轮转负载均衡）
  *   5. 优先级 - VIP用户优先处理
  *   6. 熔断保护 - 方舟API失败率超30%暂停接收，60秒后半开
+ *   7. 自适应Key检测 - 自动感知Key池大小，动态调整并发上限
  */
 
 // ==================== 并发槽位控制 ====================
@@ -26,7 +32,19 @@ interface ConcurrencySlot {
 }
 
 const activeSlots: ConcurrencySlot[] = [];
-const MAX_CONCURRENT = 50; // 最大并发AI请求数（匹配5 DMXAPI Key + 1 Coze Key的吞吐上限）
+
+/**
+ * 动态计算最大并发数：基于Key池大小自适应
+ * 每个DMXAPI Key贡献 ~10 并发 + Coze平台 10 并发 + 基础缓冲 10
+ */
+function getEffectiveMaxConcurrent(): number {
+  ensureDmxapiKeyPool();
+  const keyCount = dmxapiKeyPool.filter(k => k.active).length;
+  return Math.max(30, keyCount * 10 + 10 + 10); // 5 Key→70, 8 Key→100, 10 Key→120
+}
+
+/** @deprecated 使用 getEffectiveMaxConcurrent() 替代 */
+const MAX_CONCURRENT = 100; // 静态上限兜底（动态计算优先）
 const SLOT_TIMEOUT_MS = 3 * 60 * 1000; // 3分钟超时自动释放（图片/音乐通常10-30s，视频异步不入槽）
 
 // ==================== 速率限制 ====================
@@ -37,7 +55,19 @@ interface RateLimitEntry {
 
 const rateLimitMap = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1分钟窗口
-const RATE_LIMIT_MAX_REQUESTS = 300; // 每分钟最大300个AI请求（5 DMXAPI Key × ~60 RPM + Coze ~20 RPM）
+
+/**
+ * 动态计算全局速率限制：基于Key池大小自适应
+ * 每个DMXAPI Key贡献 ~60 RPM + Coze平台 ~20 RPM
+ */
+function getEffectiveRateLimit(): number {
+  ensureDmxapiKeyPool();
+  const keyCount = dmxapiKeyPool.filter(k => k.active).length;
+  return Math.max(300, keyCount * 60 + 20 + 100); // 5 Key→420, 8 Key→600, 10 Key→720
+}
+
+/** @deprecated 使用 getEffectiveRateLimit() 替代 */
+const RATE_LIMIT_MAX_REQUESTS = 600; // 静态上限兜底
 
 // ==================== 排队系统 ====================
 
@@ -52,7 +82,7 @@ interface QueueItem {
 }
 
 const requestQueue: QueueItem[] = [];
-const QUEUE_TIMEOUT_MS = 90 * 1000; // 排队90秒超时（3 Key场景下排队时间大幅缩短）
+const QUEUE_TIMEOUT_MS = 120 * 1000; // 排队120秒超时（100人场景排队可能稍长）
 
 // ==================== 多KEY轮转（dmxapi.cn）====================
 
@@ -196,7 +226,7 @@ function cleanupTimedOutSlots(): void {
  */
 export function getAvailableSlots(): number {
   cleanupTimedOutSlots();
-  return Math.max(0, MAX_CONCURRENT - activeSlots.length);
+  return Math.max(0, getEffectiveMaxConcurrent() - activeSlots.length);
 }
 
 /**
@@ -221,7 +251,7 @@ export function releaseSlot(slotId: string): void {
   if (idx >= 0) {
     const slot = activeSlots[idx];
     activeSlots.splice(idx, 1);
-    console.info(`[RateLimiter] 槽位释放: ${slotId}, model=${slot.model}, 剩余=${activeSlots.length}/${MAX_CONCURRENT}`);
+    console.info(`[RateLimiter] 槽位释放: ${slotId}, model=${slot.model}, 剩余=${activeSlots.length}/${getEffectiveMaxConcurrent()}`);
   }
 
   // 检查队列中是否有等待的请求
@@ -240,7 +270,7 @@ function checkRateLimit(): boolean {
   // 清理过期时间戳
   entry.timestamps = entry.timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
 
-  if (entry.timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+  if (entry.timestamps.length >= getEffectiveRateLimit()) {
     return false; // 超出速率限制
   }
 
@@ -274,7 +304,7 @@ export function checkUserRateLimit(userId: string): { allowed: boolean; remainin
  * 处理队列中的等待请求
  */
 function processQueue(): void {
-  while (activeSlots.length < MAX_CONCURRENT && requestQueue.length > 0) {
+  while (activeSlots.length < getEffectiveMaxConcurrent() && requestQueue.length > 0) {
     // 按优先级排序（VIP优先），同优先级按时间排序
     requestQueue.sort((a, b) => {
       if (a.priority !== b.priority) return b.priority - a.priority;
@@ -324,9 +354,9 @@ export async function acquireAISlot(params: {
 
   // 3. 尝试直接获取槽位
   cleanupTimedOutSlots();
-  if (activeSlots.length < MAX_CONCURRENT) {
+  if (activeSlots.length < getEffectiveMaxConcurrent()) {
     const slotId = acquireSlot(params.userId, params.model);
-    console.info(`[RateLimiter] 直接获取槽位: ${slotId}, model=${params.model}, 活跃=${activeSlots.length}/${MAX_CONCURRENT}`);
+    console.info(`[RateLimiter] 直接获取槽位: ${slotId}, model=${params.model}, 活跃=${activeSlots.length}/${getEffectiveMaxConcurrent()}`);
     return slotId;
   }
 
@@ -359,16 +389,18 @@ export function getLoadStatus(): {
   queueLength: number;
   dmxapiKeys: number;
   dmxapiActiveKeys: number;
+  effectiveRateLimit: number;
 } {
   ensureDmxapiKeyPool();
   cleanupTimedOutSlots();
 
   return {
     activeSlots: activeSlots.length,
-    maxConcurrent: MAX_CONCURRENT,
+    maxConcurrent: getEffectiveMaxConcurrent(),
     queueLength: requestQueue.length,
     dmxapiKeys: dmxapiKeyPool.length,
     dmxapiActiveKeys: dmxapiKeyPool.filter((k) => k.active).length,
+    effectiveRateLimit: getEffectiveRateLimit(),
   };
 }
 
