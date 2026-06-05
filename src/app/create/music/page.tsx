@@ -303,10 +303,15 @@ export default function CreateMusicPage() {
                     {(profile?.free_credits ?? 0) > 0 ? (
                       <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">免费</Badge>
                     ) : (
-                      <Badge variant="secondary" className="bg-amber-500/20 text-amber-400">VIP</Badge>
+                      <Badge variant="secondary" className="bg-amber-500/20 text-amber-400">免费额度已用·将扣算力</Badge>
                     )}
                   </span>
                 </div>
+                {(profile?.free_credits ?? 0) <= 0 && (
+                  <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-1.5">
+                    免费额度已用完，生成将消耗付费算力
+                  </p>
+                )}
                 <Button
                   className="w-full bg-gradient-to-r from-rose-500 to-pink-600 hover:from-rose-600 hover:to-pink-700 text-white font-medium"
                   onClick={handleGenerate}

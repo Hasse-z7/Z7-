@@ -365,9 +365,14 @@ export default function CreateDigitalHumanPage() {
                     </div>
                   </div>
                   <span className="ml-auto text-sm text-muted-foreground">
-                    {(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-xs">VIP</Badge>}
+                    {(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">额度用尽</Badge>}
                   </span>
                 </div>
+                {(profile?.free_credits ?? 0) <= 0 && (
+                  <div className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-3 py-1.5 mb-2">
+                    免费额度已用完，本次生成将消耗付费算力
+                  </div>
+                )}
                 <Button
                   className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-medium"
                   onClick={handleGenerate}
@@ -437,7 +442,7 @@ export default function CreateDigitalHumanPage() {
                     </div>
                     {tpl.is_vip_only && <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs shrink-0 ml-2">VIP</Badge>}
                   </div>
-                  <div className="text-xs mt-2">{(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-xs">VIP</Badge>}</div>
+                  <div className="text-xs mt-2">{(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-xs">额度用尽</Badge>}</div>
                 </CardContent>
               </Card>
             ))}

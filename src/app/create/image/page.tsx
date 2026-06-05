@@ -579,6 +579,11 @@ export default function CreateImagePage() {
                     </div>
                   )}
                 </div>
+                {(profile?.free_credits ?? 0) <= 0 && models.some(m => m.is_free) && (
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
+                    免费额度已用完，免费模型将消耗付费算力
+                  </div>
+                )}
                 <Button
                   className="w-full bg-gradient-to-r from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white font-medium"
                   onClick={() => handleGenerate()}
@@ -775,8 +780,10 @@ export default function CreateImagePage() {
                       <p className="text-xs text-muted-foreground truncate">
                         {selectedModel?.description || selectedModelEndpoint}
                       </p>
-                      {selectedModel?.is_free ? (
+                      {selectedModel?.is_free && (profile?.free_credits ?? 0) > 0 ? (
                         <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 text-[10px] px-1.5 py-0">免费</Badge>
+                      ) : selectedModel?.is_free && (profile?.free_credits ?? 0) <= 0 ? (
+                        <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0">免费额度已用</Badge>
                       ) : (
                         <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-[10px] px-1.5 py-0">VIP</Badge>
                       )}

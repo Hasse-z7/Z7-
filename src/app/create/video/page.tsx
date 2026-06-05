@@ -907,6 +907,11 @@ export default function CreateVideoPage() {
                     </div>
                   )}
                 </div>
+                {(profile?.free_credits ?? 0) <= 0 && models.some(m => m.is_free) && (
+                  <div className="p-2 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs">
+                    免费额度已用完，免费模型将消耗付费算力
+                  </div>
+                )}
                 <Button
                   className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium"
                   onClick={() => handleGenerate()}
@@ -1089,7 +1094,7 @@ export default function CreateVideoPage() {
                     )}
                     {models.map((m) => (
                       <option key={m.endpoint_id} value={m.endpoint_id}>
-                        {m.name}{m.is_free ? ' [免费]' : ' [VIP]'}
+                        {m.name}{m.is_free ? ((profile?.free_credits ?? 0) > 0 ? ' [免费]' : ' [免费额度已用完]') : ' [VIP]'}
                       </option>
                     ))}
                   </select>
