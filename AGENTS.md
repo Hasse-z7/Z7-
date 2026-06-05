@@ -207,7 +207,8 @@ pnpm ts-check          # TypeScript类型检查
   - `ALIPAY_APP_ID` - 支付宝应用ID
   - `ALIPAY_PRIVATE_KEY` - 应用RSA2私钥
   - `ALIPAY_ALIPAY_PUBLIC_KEY` - 支付宝RSA2公钥（用于验签）
-  - `ALIPAY_GATEWAY` - 网关地址（正式: https://openapi.alipay.com/gateway.do）
+  - `ALIPAY_GATEWAY` - 网关地址（沙箱: https://openapi-sandbox.dl.alipaydev.com/gateway.do / 正式: https://openapi.alipay.com/gateway.do）
+- **⚠️ 部署上线前必改**：将ALIPAY_GATEWAY改为正式网关、ALIPAY_APP_ID改为正式应用ID、Key改为正式Key
 - 回调网关：`/api/payment/alipay/notify`
   - 第一步：RSA2验签，失败返回fail
   - 第二步：校验订单号、金额、交易状态TRADE_SUCCESS
