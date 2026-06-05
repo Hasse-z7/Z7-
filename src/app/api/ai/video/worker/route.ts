@@ -133,6 +133,7 @@ async function processTask(taskId: string): Promise<void> {
           {
             prompt: task.prompt || undefined,
             imageUrl: primaryImageUrl,
+            lastFrameUrl: task.last_frame_url || undefined,
             duration: task.duration || 5,
             resolution: task.quality || '720p',
             ratio: task.ratio || '16:9',

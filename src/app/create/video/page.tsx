@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import {
   Sparkles, Loader2, Music, PlayCircle, PauseCircle, Trash2, ChevronDown, FolderPlus,
   RefreshCw, Pencil, Check, Clock, CheckCircle2, XCircle, Download, X, Plus, Upload,
-  ImageIcon
+  ImageIcon, Film
 } from 'lucide-react';
 
 interface Template {
@@ -90,6 +90,10 @@ export default function CreateVideoPage() {
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // First frame / Last frame for video generation
+  const [firstFrameUrl, setFirstFrameUrl] = useState<string>('');
+  const [lastFrameUrl, setLastFrameUrl] = useState<string>('');
 
   const fetchTemplates = useCallback(async () => {
     try {
@@ -384,6 +388,34 @@ export default function CreateVideoPage() {
     finally { setUploadingFile(false); }
   };
 
+  const handleUploadFirstFrame = async (file: File) => {
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'image');
+      const res = await fetch('/api/upload', { method: 'POST', headers: getAuthHeaders(), body: formData });
+      const data = await res.json();
+      if (data.url) { setFirstFrameUrl(data.url); }
+      else { alert(data.error || '上传失败'); }
+    } catch { alert('上传失败'); }
+    finally { setUploadingFile(false); }
+  };
+
+  const handleUploadLastFrame = async (file: File) => {
+    setUploadingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('type', 'image');
+      const res = await fetch('/api/upload', { method: 'POST', headers: getAuthHeaders(), body: formData });
+      const data = await res.json();
+      if (data.url) { setLastFrameUrl(data.url); }
+      else { alert(data.error || '上传失败'); }
+    } catch { alert('上传失败'); }
+    finally { setUploadingFile(false); }
+  };
+
   const handleGenerate = async (overridePrompt?: string) => {
     if (!user) { router.push('/login'); return; }
     const activePrompt = overridePrompt || prompt;
@@ -420,7 +452,7 @@ export default function CreateVideoPage() {
           'Content-Type': 'application/json',
           ...getAuthHeaders(),
         },
-        body: JSON.stringify({ prompt: activePrompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined, images: refImageUrls.length > 0 ? refImageUrls : undefined, audio_url: audioUrl || undefined }),
+        body: JSON.stringify({ prompt: activePrompt, duration, ratio: videoRatio, resolution: videoQuality, audio: generateAudio, model_id: selectedModelEndpoint, project_id: selectedProjectId || undefined, images: refImageUrls.length > 0 ? refImageUrls : undefined, audio_url: audioUrl || undefined, first_frame_url: firstFrameUrl || undefined, last_frame_url: lastFrameUrl || undefined }),
       });
       const data = await res.json();
 
@@ -584,6 +616,80 @@ export default function CreateVideoPage() {
                         }}
                       />
                     </label>
+                  )}
+                </div>
+
+                {/* First/Last Frame Upload */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Film className="w-4 h-4 text-cyan-400" />
+                    <span className="text-sm font-medium">首尾帧生视频</span>
+                    <span className="text-xs text-muted-foreground">（上传首帧/尾帧图片，根据提示词生成过渡视频）</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* First Frame */}
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground font-medium">首帧图片</p>
+                      {firstFrameUrl ? (
+                        <div className="relative group rounded-lg overflow-hidden border border-border/50 aspect-video">
+                          <img src={firstFrameUrl} alt="首帧" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => setFirstFrameUrl('')}
+                            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="block border-2 border-dashed rounded-xl p-3 text-center transition-all cursor-pointer border-border/50 hover:border-cyan-500/40 hover:bg-muted/30 aspect-video flex flex-col items-center justify-center">
+                          <ImageIcon className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
+                          <p className="text-xs text-muted-foreground">上传首帧</p>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUploadFirstFrame(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                    {/* Last Frame */}
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-muted-foreground font-medium">尾帧图片</p>
+                      {lastFrameUrl ? (
+                        <div className="relative group rounded-lg overflow-hidden border border-border/50 aspect-video">
+                          <img src={lastFrameUrl} alt="尾帧" className="w-full h-full object-cover" />
+                          <button
+                            onClick={() => setLastFrameUrl('')}
+                            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="block border-2 border-dashed rounded-xl p-3 text-center transition-all cursor-pointer border-border/50 hover:border-cyan-500/40 hover:bg-muted/30 aspect-video flex flex-col items-center justify-center">
+                          <ImageIcon className="w-4 h-4 mx-auto text-muted-foreground mb-1" />
+                          <p className="text-xs text-muted-foreground">上传尾帧</p>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) handleUploadLastFrame(file);
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                  {(firstFrameUrl || lastFrameUrl) && (
+                    <p className="text-xs text-cyan-400/70">提示：可只上传首帧，或同时上传首帧+尾帧，AI将根据提示词生成过渡视频</p>
                   )}
                 </div>
 

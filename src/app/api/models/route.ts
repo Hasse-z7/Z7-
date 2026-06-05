@@ -29,6 +29,7 @@ export async function GET(request: NextRequest) {
       .from('ai_models')
       .select('*')
       .eq('is_active', true)
+      .order('is_free', { ascending: false })  // 免费模型优先
       .order('sort_order', { ascending: true });
 
     if (category) {

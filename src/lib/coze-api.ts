@@ -65,6 +65,8 @@ export async function generateVideo(
   options: {
     prompt?: string;
     imageUrl?: string;
+    firstFrameUrl?: string;
+    lastFrameUrl?: string;
     duration?: number;
     resolution?: string;
     ratio?: string;
@@ -95,11 +97,23 @@ export async function generateVideo(
   if (options.prompt) {
     content.push({ type: 'text', text: options.prompt });
   }
-  if (options.imageUrl) {
+
+  // Support first_frame (首帧) — from imageUrl (legacy) or firstFrameUrl
+  const firstFrame = options.firstFrameUrl || options.imageUrl;
+  if (firstFrame) {
     content.push({
       type: 'image_url',
-      image_url: { url: options.imageUrl },
+      image_url: { url: firstFrame },
       role: 'first_frame',
+    });
+  }
+
+  // Support last_frame (尾帧)
+  if (options.lastFrameUrl) {
+    content.push({
+      type: 'image_url',
+      image_url: { url: options.lastFrameUrl },
+      role: 'last_frame',
     });
   }
 

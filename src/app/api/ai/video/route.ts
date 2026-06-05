@@ -109,6 +109,8 @@ export async function POST(request: NextRequest) {
       prompt,
       negative_prompt,
       image_url,
+      first_frame_url,
+      last_frame_url,
       images,
       mode,
       duration,
@@ -120,7 +122,7 @@ export async function POST(request: NextRequest) {
       project_id,
     } = body;
 
-    if (!prompt && !image_url && (!images || images.length === 0)) {
+    if (!prompt && !image_url && !first_frame_url && (!images || images.length === 0)) {
       return NextResponse.json({ error: '请输入描述或上传图片' }, { status: 400 });
     }
 
@@ -195,10 +197,23 @@ export async function POST(request: NextRequest) {
 
     // ========== 5. 创建异步任务记录 ==========
     const referenceImages: string[] = [];
+    const effectiveFirstFrame = first_frame_url || image_url;
     if (images && Array.isArray(images)) {
       referenceImages.push(...images.filter((url: string) => typeof url === 'string'));
-    } else if (image_url) {
-      referenceImages.push(image_url);
+    } else if (effectiveFirstFrame) {
+      referenceImages.push(effectiveFirstFrame);
+    }
+
+    // Determine mode based on input
+    let effectiveMode = mode;
+    if (!effectiveMode) {
+      if (effectiveFirstFrame && last_frame_url) {
+        effectiveMode = 'frame2video'; // 首尾帧生视频
+      } else if (effectiveFirstFrame) {
+        effectiveMode = 'img2video';
+      } else {
+        effectiveMode = 'text2video';
+      }
     }
 
     const { data: task, error: taskError } = await supabase
@@ -212,8 +227,9 @@ export async function POST(request: NextRequest) {
         duration: videoDuration,
         quality: resolution || '720p',
         fps: 24,
-        mode: mode || (referenceImages.length > 0 ? 'img2video' : 'text2video'),
+        mode: effectiveMode,
         reference_images: referenceImages,
+        last_frame_url: last_frame_url || null,
         audio_url: audio_url || null,
         audio_enabled: audio !== false,
         credits_cost: creditsCost,
