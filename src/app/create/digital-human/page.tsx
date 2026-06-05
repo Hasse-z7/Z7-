@@ -2,15 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import {
-  Bot, Download, Sparkles, Loader2, MonitorSmartphone, ArrowLeft
+  Bot, Download, Sparkles, Loader2, MonitorSmartphone, Plus, FolderPlus
 } from 'lucide-react';
-import { usePersistedState } from '@/hooks/use-persisted-state';
 
 interface AIModel {
   id: string;
@@ -18,6 +17,16 @@ interface AIModel {
   endpoint_id: string;
   category: string;
   description: string;
+}
+
+interface Template {
+  id: string;
+  name: string;
+  sub_category: string;
+  description: string;
+  prompt_template: string;
+  credits_cost: number;
+  is_vip_only: boolean;
 }
 
 interface DigitalHumanWork {
@@ -38,23 +47,31 @@ const avatars = [
 export default function CreateDigitalHumanPage() {
   const { profile, user, updateCredits } = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const projectIdFromUrl = searchParams.get('project_id') || '';
-
-  const [prompt, setPrompt] = usePersistedState<string>('digital_human_prompt', '');
+  const [prompt, setPrompt] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState('news_anchor');
   const [voices, setVoices] = useState<AIModel[]>([]);
   const [selectedVoice, setSelectedVoice] = useState('zh_female_xiaohe_uranus_bigtts');
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [loading, setLoading] = useState(false);
   const [resultUrl, setResultUrl] = useState('');
+  const [templates, setTemplates] = useState<Template[]>([]);
 
   // Project selection
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
-  const [selectedProjectId, setSelectedProjectId] = useState<string>(projectIdFromUrl);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('');
 
   // History works
   const [historyWorks, setHistoryWorks] = useState<DigitalHumanWork[]>([]);
+
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const res = await fetch('/api/templates?category=digital_human');
+      const data = await res.json();
+      if (data.templates) setTemplates(data.templates);
+    } catch (err) {
+      console.error(err);
+    }
+  }, []);
 
   const fetchVoices = useCallback(async () => {
     try {
@@ -80,7 +97,7 @@ export default function CreateDigitalHumanPage() {
       const data = await res.json();
       if (data.projects) {
         setProjects(data.projects);
-        const saved = projectIdFromUrl || localStorage.getItem('selectedProjectId_digital_human');
+        const saved = localStorage.getItem('selectedProjectId_digital_human');
         if (saved && data.projects.some((p: { id: string }) => p.id === saved)) {
           setSelectedProjectId(saved);
         }
@@ -88,7 +105,7 @@ export default function CreateDigitalHumanPage() {
     } catch (err) {
       console.error('Fetch projects error:', err);
     }
-  }, [projectIdFromUrl]);
+  }, []);
 
   const fetchExistingWorks = useCallback(async () => {
     try {
@@ -102,7 +119,7 @@ export default function CreateDigitalHumanPage() {
     }
   }, []);
 
-  useEffect(() => { fetchVoices(); fetchProjects(); fetchExistingWorks(); }, [fetchVoices, fetchProjects, fetchExistingWorks]);
+  useEffect(() => { fetchTemplates(); fetchVoices(); fetchProjects(); fetchExistingWorks(); }, [fetchTemplates, fetchVoices, fetchProjects, fetchExistingWorks]);
 
   const handleGenerate = async () => {
     if (!user) { router.push('/login'); return; }
@@ -134,6 +151,7 @@ export default function CreateDigitalHumanPage() {
         if (data.remaining_credits !== undefined) {
           updateCredits(data.remaining_credits);
         }
+        // Refresh history
         fetchExistingWorks();
       } else {
         alert(data.error || '生成失败');
@@ -145,47 +163,67 @@ export default function CreateDigitalHumanPage() {
     }
   };
 
-  // 返回按钮：保存当前内容到localStorage，3分钟有效期
-  const handleBack = () => {
-    if (selectedProjectId) {
-      router.push(`/projects/${selectedProjectId}`);
-    } else {
-      router.push('/projects');
+  const handleCreateProject = async () => {
+    const now = new Date();
+    const dateName = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}数字人项目`;
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ name: dateName }),
+      });
+      const data = await res.json();
+      if (data.project) {
+        setSelectedProjectId(data.project.id);
+        localStorage.setItem('selectedProjectId_digital_human', data.project.id);
+        fetchProjects();
+      }
+    } catch (e) {
+      console.error('创建项目失败:', e);
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" onClick={handleBack} className="shrink-0">
-              <ArrowLeft className="w-5 h-5" />
-            </Button>
-            <div>
-              <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
-                AI数字人
-              </h1>
-              <p className="text-muted-foreground mt-1">文字生成数字人播报视频，多形象多音色可选</p>
-            </div>
-          </div>
-          {/* 项目选择器 */}
-          <div className="flex items-center gap-2">
-            <select
-              value={selectedProjectId}
-              onChange={(e) => setSelectedProjectId(e.target.value)}
-              className="appearance-none rounded-lg border border-border/50 bg-muted/50 px-3 py-2 pr-8 text-sm text-foreground max-w-[200px] truncate"
-            >
-              <option value="">选择项目</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-400 bg-clip-text text-transparent">
+            AI数字人
+          </h1>
+          <p className="text-muted-foreground mt-2">文字生成数字人播报视频，多形象多音色可选</p>
         </div>
 
+        {/* 未创建项目时显示新建项目引导 */}
+        {!selectedProjectId ? (
+          <Card className="border-border/50 bg-card/50 backdrop-blur">
+            <CardContent className="py-16 flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-amber-500/20 to-orange-500/20 flex items-center justify-center mb-6">
+                <Plus className="w-10 h-10 text-amber-400" />
+              </div>
+              <h2 className="text-xl font-semibold text-foreground mb-2">新建项目</h2>
+              <p className="text-muted-foreground mb-6 max-w-md">创建一个项目来开始AI数字人创作，所有生成的作品将保存在项目中</p>
+              <Button
+                onClick={handleCreateProject}
+                className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white px-8 py-3 text-base"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                新建数字人项目
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-6">
+            {/* Project bar */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <FolderPlus className="w-4 h-4" />
+              <span>当前项目：{projects.find(p => p.id === selectedProjectId)?.name || '未命名'}</span>
+              <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={() => {
+                setSelectedProjectId('');
+                localStorage.removeItem('selectedProjectId_digital_human');
+              }}>切换项目</Button>
+            </div>
+
             {/* Avatar Selection */}
             <Card className="border-border/50">
               <CardHeader className="pb-3">
@@ -331,16 +369,28 @@ export default function CreateDigitalHumanPage() {
           </div>
 
           <div className="space-y-4">
-            <Card className="border-border/50">
-              <CardContent className="p-4">
-                <p className="text-sm text-muted-foreground">
-                  选择数字人形象和音色，输入播报文案，AI将为你生成数字人播报视频。
-                  营销达人消耗30算力点，其他形象消耗25算力点。
-                </p>
-              </CardContent>
-            </Card>
+            <h3 className="text-lg font-semibold">数字人模板</h3>
+            {templates.map((tpl) => (
+              <Card
+                key={tpl.id}
+                className="cursor-pointer border-border/50 hover:border-amber-500/30 transition-all hover:-translate-y-0.5"
+                onClick={() => { setPrompt(tpl.prompt_template); setSelectedAvatar(tpl.sub_category); }}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-medium text-sm">{tpl.name}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{tpl.description}</p>
+                    </div>
+                    {tpl.is_vip_only && <Badge variant="outline" className="text-amber-400 border-amber-400/30 text-xs shrink-0 ml-2">VIP</Badge>}
+                  </div>
+                  <div className="text-xs mt-2">{(profile?.free_credits ?? 0) > 0 ? <Badge variant="secondary" className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">免费</Badge> : <Badge variant="secondary" className="bg-amber-500/20 text-amber-400 text-xs">VIP</Badge>}</div>
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
+        )}
       </div>
     </div>
   );
