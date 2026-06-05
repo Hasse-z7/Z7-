@@ -227,28 +227,7 @@ export default function HomePage() {
       </section>
       )}
 
-      {/* CTA */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <Card className="relative overflow-hidden border-cyan-500/20 bg-gradient-to-r from-cyan-950/50 via-blue-950/50 to-violet-950/50">
-          <div className="absolute inset-0">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-cyan-500/10 rounded-full blur-3xl" />
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl" />
-          </div>
-          <CardContent className="relative p-8 sm:p-12 flex flex-col sm:flex-row items-center gap-6">
-            <div className="flex-1 text-center sm:text-left">
-              <h3 className="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                新人注册即送50算力点
-              </h3>
-              <p className="text-muted-foreground mt-2">立即注册，免费体验AI生图、视频、音乐创作</p>
-            </div>
-            <Link href="/register">
-              <Button size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium px-8">
-                <Sparkles className="w-4 h-4 mr-2" /> 免费注册
-              </Button>
-            </Link>
-          </CardContent>
-        </Card>
-      </section>
+
     </div>
   );
 }
