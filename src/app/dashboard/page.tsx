@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/auth-context';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Sparkles, Zap, Crown,
+  Sparkles, Zap, Crown, Shield,
   ArrowRight, Wand2, Film, Mic, FolderOpen, History, Trash2, Plus, Folder
 } from 'lucide-react';
 
@@ -117,7 +117,7 @@ export default function DashboardPage() {
 
             {/* Stats */}
             {profile && (
-              <div className="flex items-center justify-center gap-6 pt-4">
+              <div className="flex items-center justify-center gap-6 pt-4 flex-wrap">
                 <div className="flex items-center gap-2 text-sm">
                   <Zap className="w-4 h-4 text-cyan-400" />
                   <span className="text-muted-foreground">算力点:</span>
@@ -130,6 +130,12 @@ export default function DashboardPage() {
                     {profile.vip_level === 'free' ? '免费' : profile.vip_level}
                   </span>
                 </div>
+                {profile.is_admin && (
+                  <Link href="/admin" className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 font-medium hover:bg-red-500/20 transition-colors">
+                    <Shield className="w-4 h-4" />
+                    管理后台
+                  </Link>
+                )}
               </div>
             )}
           </div>

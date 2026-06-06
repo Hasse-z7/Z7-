@@ -7,7 +7,7 @@ import { useTheme } from 'next-themes';
 import { useState, useEffect } from 'react';
 import {
   Sparkles, Video, Music, UserRound, CreditCard, LogOut,
-  Sun, Moon, Search, Menu, X, FolderOpen, Crown, History, Trash2, Wand2, Clapperboard
+  Sun, Moon, Search, Menu, X, FolderOpen, Crown, History, Trash2, Wand2, Clapperboard, Shield
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -171,6 +171,11 @@ export default function Navbar() {
                 <DropdownMenuItem onClick={() => router.push('/membership')}>
                   <Crown className="mr-2 h-4 w-4" />会员权益
                 </DropdownMenuItem>
+                {profile?.is_admin && (
+                  <DropdownMenuItem onClick={() => router.push('/admin')}>
+                    <Shield className="mr-2 h-4 w-4" />管理后台
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={async () => { await logout(); router.push('/login'); }} className="text-red-500">
                   <LogOut className="mr-2 h-4 w-4" />退出登录
