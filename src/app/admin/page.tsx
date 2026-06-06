@@ -684,10 +684,6 @@ function AdminRecharge() {
       setMessage({ type: 'error', text: '请选择充值套餐' });
       return;
     }
-    if (!rechargeDesc.trim()) {
-      setMessage({ type: 'error', text: '请填写充值说明' });
-      return;
-    }
     const pkg = RECHARGE_PACKAGES[selectedPackage];
     const creditsAmount = pkg.total;
     setRecharging(true);
@@ -700,7 +696,7 @@ function AdminRecharge() {
           userId: userResult.id,
           amount: creditsAmount,
           creditsType: rechargeType,
-          description: `${rechargeDesc.trim()}（${pkg.label}套餐，含赠送${pkg.bonus}算力）`,
+          description: `${rechargeDesc.trim() || '管理员手动充值'}（${pkg.label}套餐，含赠送${pkg.bonus}算力）`,
         }),
       });
       const data = await res.json();
@@ -908,7 +904,7 @@ function AdminRecharge() {
 
               {/* 充值说明 */}
               <div className="mb-4">
-                <label className="text-xs text-slate-400 mb-1 block">充值说明（必填）</label>
+                <label className="text-xs text-slate-400 mb-1 block">充值说明（选填）</label>
                 <input
                   type="text"
                   placeholder="如：管理员手动充值、活动赠送等"
@@ -934,7 +930,7 @@ function AdminRecharge() {
                 </div>
                 <Button
                   onClick={handleRecharge}
-                  disabled={recharging || selectedPackage === null || !rechargeDesc.trim()}
+                  disabled={recharging || selectedPackage === null}
                   className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white"
                 >
                   {recharging ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Wallet className="h-4 w-4 mr-2" />}
