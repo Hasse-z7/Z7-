@@ -31,6 +31,18 @@ interface Transaction {
   created_at: string;
 }
 
+interface Order {
+  id: string;
+  order_no: string;
+  package_name: string;
+  amount: number;
+  credits_granted: number;
+  payment_method: string;
+  status: string;
+  created_at: string;
+  paid_at: string | null;
+}
+
 // 算力消耗说明
 const COST_RULES = [
   { label: 'AI生图', value: '1~20算力点/张' },
@@ -57,7 +69,10 @@ export default function RechargePage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [txPage, setTxPage] = useState(1);
   const [txTotal, setTxTotal] = useState(0);
-  const [activeTab, setActiveTab] = useState<'recharge' | 'billing'>('recharge');
+  const [activeTab, setActiveTab] = useState<'recharge' | 'orders' | 'billing'>('recharge');
+
+  // 订单记录
+  const [orders, setOrders] = useState<Order[]>([]);
 
   const fetchPackages = useCallback(async () => {
     try {
@@ -86,13 +101,27 @@ export default function RechargePage() {
     }
   }, [user]);
 
+  const fetchOrders = useCallback(async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('/api/orders', {
+        headers: { ...getAuthHeaders() },
+      });
+      const data = await res.json();
+      if (data.orders) setOrders(data.orders);
+    } catch (err) {
+      console.error('Fetch orders error:', err);
+    }
+  }, [user]);
+
   useEffect(() => {
     fetchPackages();
   }, [fetchPackages]);
 
   useEffect(() => {
     if (user) fetchTransactions(1);
-  }, [user, fetchTransactions]);
+    if (user) fetchOrders();
+  }, [user, fetchTransactions, fetchOrders]);
 
   const creditPackages = packages.filter(p => p.type === 'credits');
 
@@ -192,13 +221,23 @@ export default function RechargePage() {
           </button>
           <button
             className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              activeTab === 'orders'
+                ? 'bg-background shadow-sm text-foreground'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+            onClick={() => setActiveTab('orders')}
+          >
+            充值订单
+          </button>
+          <button
+            className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
               activeTab === 'billing'
                 ? 'bg-background shadow-sm text-foreground'
                 : 'text-muted-foreground hover:text-foreground'
             }`}
             onClick={() => setActiveTab('billing')}
           >
-            账单记录
+            算力明细
           </button>
         </div>
 
@@ -270,7 +309,61 @@ export default function RechargePage() {
           </>
         )}
 
-        {/* 账单记录 Tab */}
+        {/* 充值订单 Tab */}
+        {activeTab === 'orders' && (
+          <section>
+            {orders.length === 0 ? (
+              <Card className="border-border/50">
+                <CardContent className="p-12 text-center">
+                  <Clock className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-muted-foreground">暂无订单记录</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">充值后订单将在这里显示</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-2">
+                {orders.map((order) => {
+                  const statusMap: Record<string, { label: string; color: string }> = {
+                    completed: { label: '已完成', color: 'text-emerald-400 bg-emerald-500/10' },
+                    pending: { label: '待支付', color: 'text-amber-400 bg-amber-500/10' },
+                    failed: { label: '失败', color: 'text-red-400 bg-red-500/10' },
+                    refunded: { label: '已退款', color: 'text-slate-400 bg-slate-500/10' },
+                  };
+                  const st = statusMap[order.status] || statusMap.pending;
+                  return (
+                    <Card key={order.id} className="border-border/30 hover:border-border/50 transition-colors">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-xl ${st.color} flex items-center justify-center`}>
+                              <Zap className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{order.package_name || '充值订单'}</p>
+                              <p className="text-xs text-muted-foreground">{order.order_no}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm font-semibold">¥{order.amount}</p>
+                            <div className="flex items-center gap-2 justify-end">
+                              <span className={`text-xs px-1.5 py-0.5 rounded ${st.color}`}>{st.label}</span>
+                              <span className="text-xs text-muted-foreground">{order.credits_granted}算力</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-2 pt-2 border-t border-border/20 text-xs text-muted-foreground">
+                          {order.paid_at ? formatTime(order.paid_at) : formatTime(order.created_at)}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* 算力明细 Tab */}
         {activeTab === 'billing' && (
           <section>
             {transactions.length === 0 ? (
