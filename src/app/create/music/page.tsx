@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
+import { useSessionState } from '@/hooks/use-session-state';
 import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -45,8 +46,8 @@ export default function CreateMusicPage() {
   const [prompt, setPrompt] = useState('');
   const [lyrics, setLyrics] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('pop');
-  const [resultUrl, setResultUrl] = useState('');
-  const [resultLyrics, setResultLyrics] = useState('');
+  const [resultUrl, setResultUrl] = useSessionState<string>('music_result_url', '');
+  const [resultLyrics, setResultLyrics] = useSessionState<string>('music_result_lyrics', '');
   const [templates, setTemplates] = useState<Template[]>([]);
 
   // Project selection

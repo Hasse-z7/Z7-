@@ -7,6 +7,7 @@ import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { Textarea } from '@/components/ui/textarea';
 import { Upload, Video, Link, Copy, Check, Loader2, X, Play } from 'lucide-react';
 import { useAuth } from '@/contexts/auth-context';
+import { useSessionState } from '@/hooks/use-session-state';
 import { useRouter } from 'next/navigation';
 
 export default function VideoAnalyzerPage() {
@@ -16,7 +17,7 @@ export default function VideoAnalyzerPage() {
   const [videoPreview, setVideoPreview] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState('');
   const [inputMode, setInputMode] = useState<'upload' | 'url'>('upload');
-  const [result, setResult] = useState('');
+  const [result, setResult] = useSessionState<string>('video_analyzer_result', '');
   const [uploading, setUploading] = useState(false);
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

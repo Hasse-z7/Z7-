@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
+import { useSessionState } from '@/hooks/use-session-state';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -53,7 +54,7 @@ export default function CreateDigitalHumanPage() {
   const [selectedVoice, setSelectedVoice] = useState('zh_female_xiaohe_uranus_bigtts');
   const [orientation, setOrientation] = useState<'horizontal' | 'vertical'>('horizontal');
   const [loading, setLoading] = useState(false);
-  const [resultUrl, setResultUrl] = useState('');
+  const [resultUrl, setResultUrl] = useSessionState<string>('digital_human_result_url', '');
   const [templates, setTemplates] = useState<Template[]>([]);
 
   // Project selection

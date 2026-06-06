@@ -7,6 +7,7 @@ import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
+import { useSessionState } from '@/hooks/use-session-state';
 import {
   Upload,
   ImageIcon,
@@ -41,7 +42,7 @@ export default function PromptAnalyzerPage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [selectedStyle, setSelectedStyle] = useState('真人写实');
   const [uploading, setUploading] = useState(false);
-  const [result, setResult] = useState<PromptResult | null>(null);
+  const [result, setResult] = useSessionState<PromptResult | null>('prompt_analyzer_result', null);
   const [streamingText, setStreamingText] = useState('');
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

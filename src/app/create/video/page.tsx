@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { usePersistedState } from '@/hooks/use-persisted-state';
+import { useSessionState } from '@/hooks/use-session-state';
 import { useActionThrottle } from '@/hooks/use-action-throttle';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -84,7 +85,7 @@ export default function CreateVideoPage() {
   const [hydrated, setHydrated] = useState(false);
 
   // Multi-task queue
-  const [tasks, setTasks] = useState<VideoTask[]>([]);
+  const [tasks, setTasks] = useSessionState<VideoTask[]>('video_tasks', []);
   const taskIdCounter = useRef(0);
   const pollingIntervals = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
 

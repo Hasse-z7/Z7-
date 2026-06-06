@@ -75,6 +75,7 @@ const imageRatios = [
 ];
 
 import { usePersistedState } from '@/hooks/use-persisted-state';
+import { useSessionState } from '@/hooks/use-session-state';
 
 export default function CreateImagePage() {
   const { profile, user, updateCredits } = useAuth();
@@ -93,7 +94,7 @@ export default function CreateImagePage() {
   const [hydrated, setHydrated] = useState(false);
 
   // Multi-task queue
-  const [tasks, setTasks] = useState<ImageTask[]>([]);
+  const [tasks, setTasks] = useSessionState<ImageTask[]>('image_tasks', []);
   const taskIdCounter = useRef(0);
 
   // 未保存到项目的作品追踪

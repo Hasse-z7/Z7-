@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { Upload, Eraser, RotateCcw, Download, ImageIcon, Video, Minus, Plus, Brush, MousePointer2, Loader2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { useActionThrottle } from '@/hooks/use-action-throttle';
+import { useSessionState } from '@/hooks/use-session-state';
 import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 
@@ -13,7 +14,7 @@ export default function EraserPage() {
   const [mediaType, setMediaType] = useState<MediaType>('image');
   const [originalUrl, setOriginalUrl] = useState<string>('');
   const [originalFile, setOriginalFile] = useState<File | null>(null);
-  const [resultUrl, setResultUrl] = useState<string>('');
+  const [resultUrl, setResultUrl] = useSessionState<string>('eraser_result_url', '');
   const [brushSize, setBrushSize] = useState(20);
   const [isDrawing, setIsDrawing] = useState(false);
   const [tool, setTool] = useState<'brush' | 'eraser_tool'>('brush');
