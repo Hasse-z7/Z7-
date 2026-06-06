@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -9,92 +9,23 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Loader2, Lock, Phone, Eye, EyeOff, MessageSquare, KeyRound } from 'lucide-react';
-
-type LoginTab = 'sms' | 'password';
+import { Loader2, Lock, Phone, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
-  const [activeTab, setActiveTab] = useState<LoginTab>('sms');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  // Phone + SMS OTP state
   const [phone, setPhone] = useState('');
-  const [otpCode, setOtpCode] = useState('');
-  const [countdown, setCountdown] = useState(0);
-  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  // Phone + Password state
-  const [pwdPhone, setPwdPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
-  const { loginWithPhone, loginWithPassword } = useAuth();
+  const { loginWithPassword } = useAuth();
   const router = useRouter();
 
-  useEffect(() => {
-    return () => {
-      if (countdownRef.current) clearInterval(countdownRef.current);
-    };
-  }, []);
-
-  const startCountdown = useCallback(() => {
-    setCountdown(60);
-    countdownRef.current = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          if (countdownRef.current) clearInterval(countdownRef.current);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-  }, []);
-
-  const handleSendOtp = async () => {
-    setError('');
-    const cleanPhone = phone.replace(/\s/g, '');
-    if (!/^1[3-9]\d{9}$/.test(cleanPhone)) {
-      setError('请输入正确的手机号');
-      return;
-    }
-    try {
-      const res = await fetch('/api/auth/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '发送验证码失败');
-      startCountdown();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '发送验证码失败');
-    }
-  };
-
-  const handleSmsLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     const cleanPhone = phone.replace(/\s/g, '');
-    if (!cleanPhone || !otpCode) {
-      setError('请输入手机号和验证码');
-      return;
-    }
-    setLoading(true);
-    try {
-      await loginWithPhone(cleanPhone, otpCode);
-      router.push('/dashboard');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '登录失败');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handlePasswordLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    const cleanPhone = pwdPhone.replace(/\s/g, '');
     if (!cleanPhone || !password) {
       setError('请输入手机号和密码');
       return;
@@ -139,163 +70,73 @@ export default function LoginPage() {
           <CardDescription>登录你的账号，开始AI创作之旅</CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          {error && (
-            <div className="p-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg">
-              {error}
+        <CardContent>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="p-3 text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="phone">手机号</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="phone"
+                  type="tel"
+                  placeholder="请输入11位手机号"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className="pl-10"
+                  maxLength={11}
+                />
+              </div>
             </div>
-          )}
 
-          {/* Tab Switcher */}
-          <div className="flex bg-muted/50 rounded-lg p-1">
-            <button
-              type="button"
-              onClick={() => { setActiveTab('sms'); setError(''); }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTab === 'sms'
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <MessageSquare className="w-4 h-4" />
-              验证码登录
-            </button>
-            <button
-              type="button"
-              onClick={() => { setActiveTab('password'); setError(''); }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-md text-sm font-medium transition-all ${
-                activeTab === 'password'
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              <KeyRound className="w-4 h-4" />
-              密码登录
-            </button>
-          </div>
-
-          {/* SMS Login Form */}
-          {activeTab === 'sms' && (
-            <form onSubmit={handleSmsLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="sms-phone">手机号</Label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground font-medium">+86</span>
-                  <Input
-                    id="sms-phone"
-                    type="tel"
-                    placeholder="请输入手机号"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    className="pl-12"
-                    maxLength={11}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="sms-otp">验证码</Label>
-                <div className="flex gap-3">
-                  <Input
-                    id="sms-otp"
-                    type="text"
-                    placeholder="请输入验证码"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value)}
-                    className="flex-1"
-                    maxLength={6}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleSendOtp}
-                    disabled={countdown > 0 || !phone}
-                    className="shrink-0 min-w-[110px]"
-                  >
-                    {countdown > 0 ? `${countdown}s` : '获取验证码'}
-                  </Button>
-                </div>
-              </div>
-
-              <Button
-                type="submit"
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium"
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {loading ? '登录中...' : '登录/注册'}
-              </Button>
-
-              <p className="text-xs text-muted-foreground text-center">
-                验证码登录即自动注册，开始您的AI创作之旅
-              </p>
-            </form>
-          )}
-
-          {/* Password Login Form */}
-          {activeTab === 'password' && (
-            <form onSubmit={handlePasswordLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="pwd-phone">手机号</Label>
-                <div className="relative">
-                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="pwd-phone"
-                    type="tel"
-                    placeholder="请输入11位手机号"
-                    value={pwdPhone}
-                    onChange={(e) => setPwdPhone(e.target.value)}
-                    className="pl-10"
-                    maxLength={11}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="pwd-password">密码</Label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
-                    id="pwd-password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="输入密码"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-end">
-                <Link href="/forgot-password" className="text-sm text-cyan-400 hover:text-cyan-300 transition-colors">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="password">密码</Label>
+                <Link href="/forgot-password" className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
                   忘记密码?
                 </Link>
               </div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder="输入密码"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-10 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
 
-              <Button
-                type="submit"
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium"
-                disabled={loading}
-              >
-                {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                {loading ? '登录中...' : '登 录'}
-              </Button>
+            <Button
+              type="submit"
+              className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-medium"
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+              {loading ? '登录中...' : '登 录'}
+            </Button>
 
-              <p className="text-sm text-muted-foreground text-center">
-                还没有账号?{' '}
-                <Link href="/register" className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
-                  免费注册
-                </Link>
-              </p>
-            </form>
-          )}
+            <p className="text-sm text-muted-foreground text-center">
+              还没有账号?{' '}
+              <Link href="/register" className="text-cyan-400 hover:text-cyan-300 font-medium transition-colors">
+                免费注册
+              </Link>
+            </p>
+          </form>
         </CardContent>
       </Card>
     </div>
