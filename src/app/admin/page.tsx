@@ -616,7 +616,9 @@ function AdminRecharge() {
       const param = searchType === 'phone' 
         ? `phone=${encodeURIComponent(searchInput.trim())}`
         : `userId=${encodeURIComponent(searchInput.trim())}`;
-      const res = await fetch(`/api/admin/recharge?${param}`);
+      const res = await fetch(`/api/admin/recharge?${param}`, {
+        headers: { ...getAuthHeaders() },
+      });
       const data = await res.json();
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || '查询失败' });
@@ -646,7 +648,7 @@ function AdminRecharge() {
     try {
       const res = await fetch('/api/admin/recharge', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           userId: userResult.id,
           amount,
