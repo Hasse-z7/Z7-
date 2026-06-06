@@ -153,7 +153,7 @@ export default function AdminPage() {
         </div>
 
         <Tabs value={tab} onValueChange={setTab}>
-          <TabsList>
+          <TabsList className="flex flex-wrap h-auto gap-1">
             <TabsTrigger value="users"><Users className="w-4 h-4 mr-1" />用户</TabsTrigger>
             <TabsTrigger value="orders"><CreditCard className="w-4 h-4 mr-1" />订单</TabsTrigger>
             <TabsTrigger value="credits"><Zap className="w-4 h-4 mr-1" />算力</TabsTrigger>

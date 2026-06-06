@@ -13,11 +13,11 @@ export async function GET(request: NextRequest) {
     const { user } = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: '请先登录' }, { status: 401 });
 
-    // 检查管理员权限
+    // 检查管理员权限（user.id 对应 profiles.user_id）
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('is_admin')
-      .eq('id', user.id)
+      .select('is_admin, user_id')
+      .eq('user_id', user.id)
       .single();
 
     if (!profile?.is_admin) {
@@ -53,11 +53,11 @@ export async function GET(request: NextRequest) {
       targetUserId = matchedUser.id;
     }
 
-    // 查询 profiles 表获取算力信息
+    // 查询 profiles 表获取算力信息（user_id 对应 auth.users.id）
     const { data: targetProfile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('*')
-      .eq('id', targetUserId)
+      .eq('user_id', targetUserId)
       .single();
 
     if (profileError || !targetProfile) {
@@ -114,11 +114,11 @@ export async function POST(request: NextRequest) {
     const { user } = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: '请先登录' }, { status: 401 });
 
-    // 检查管理员权限
+    // 检查管理员权限（user.id 对应 profiles.user_id）
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('is_admin')
-      .eq('id', user.id)
+      .select('is_admin, user_id')
+      .eq('user_id', user.id)
       .single();
 
     if (!profile?.is_admin) {
