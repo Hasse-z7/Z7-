@@ -731,6 +731,8 @@ function AdminRecharge() {
         body: JSON.stringify({
           userId: userResult.id,
           amount: creditsAmount,
+          amountYuan: isCustomPackage ? customYuan : RECHARGE_PACKAGES[selectedPackage!].price,
+          packageName: isCustomPackage ? `自定义充值¥${customYuan}` : RECHARGE_PACKAGES[selectedPackage!].label,
           creditsType: rechargeType,
           description: `${rechargeDesc.trim() || '管理员手动充值'}（${descLabel}）`,
         }),

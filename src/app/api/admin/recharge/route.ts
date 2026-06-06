@@ -1,11 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'crypto';
 
 const supabaseAdmin = createClient(
   process.env.COZE_SUPABASE_URL!,
   process.env.COZE_SUPABASE_SERVICE_ROLE_KEY!
 );
+
+function generateOrderNo(): string {
+  const now = new Date();
+  const ts = now.getFullYear().toString() +
+    (now.getMonth() + 1).toString().padStart(2, '0') +
+    now.getDate().toString().padStart(2, '0') +
+    now.getHours().toString().padStart(2, '0') +
+    now.getMinutes().toString().padStart(2, '0') +
+    now.getSeconds().toString().padStart(2, '0');
+  const rand = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `ADM${ts}${rand}`;
+}
 
 // GET: 搜索用户 /api/admin/recharge?phone=xxx 或 ?userId=xxx
 export async function GET(request: NextRequest) {
@@ -127,7 +140,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { userId, amount, creditsType, description } = body;
+    const { userId, amount, amountYuan, packageName, creditsType, description } = body;
 
     if (!userId || !amount || amount <= 0) {
       return NextResponse.json({ error: '参数无效' }, { status: 400 });
@@ -181,6 +194,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '充值失败' }, { status: 500 });
     }
 
+    // 创建订单记录
+    const orderNo = generateOrderNo();
+    await supabaseAdmin.from('orders').insert({
+      id: randomUUID(),
+      user_id: userId,
+      order_no: orderNo,
+      package_id: 0,
+      package_name: packageName || '管理员充值',
+      amount: amountYuan || 0,
+      payment_method: 'admin_recharge',
+      status: 'completed',
+      credits_granted: amount,
+      vip_days_granted: 0,
+      paid_at: new Date().toISOString(),
+      verified_at: new Date().toISOString(),
+    });
+
     // 记录流水
     await supabaseAdmin.from('credits_transactions').insert({
       user_id: userId,
@@ -194,6 +224,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `成功充值${amount}算力`,
+      orderNo: orderNo,
       newCredits: newTotal,
       newFreeCredits: newFree,
       newPaidCredits: newPaid,

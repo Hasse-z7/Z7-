@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
 import { createClient } from '@supabase/supabase-js';
+import { randomUUID } from 'crypto';
 
 const supabaseAdmin = createClient(
   process.env.COZE_SUPABASE_URL!,
@@ -24,6 +25,18 @@ function calcVipLevel(totalRecharged: number): string {
   if (totalRecharged >= 2000) return 'vip2';
   if (totalRecharged >= 500) return 'vip1';
   return 'free';
+}
+
+function generateOrderNo(): string {
+  const now = new Date();
+  const ts = now.getFullYear().toString() +
+    (now.getMonth() + 1).toString().padStart(2, '0') +
+    now.getDate().toString().padStart(2, '0') +
+    now.getHours().toString().padStart(2, '0') +
+    now.getMinutes().toString().padStart(2, '0') +
+    now.getSeconds().toString().padStart(2, '0');
+  const rand = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `BAT${ts}${rand}`;
 }
 
 interface BatchItem {
@@ -150,6 +163,23 @@ export async function POST(request: NextRequest) {
           type: 'recharge',
           credits_type: type,
           description: desc,
+        });
+
+        // 创建订单记录
+        const orderNo = generateOrderNo();
+        await supabaseAdmin.from('orders').insert({
+          id: randomUUID(),
+          user_id: userId,
+          order_no: orderNo,
+          package_id: 0,
+          package_name: `批量充值¥${item.amount_yuan}`,
+          amount: item.amount_yuan,
+          payment_method: 'admin_recharge',
+          status: 'completed',
+          credits_granted: totalCredits,
+          vip_days_granted: 0,
+          paid_at: new Date().toISOString(),
+          verified_at: new Date().toISOString(),
         });
 
         result.success++;
