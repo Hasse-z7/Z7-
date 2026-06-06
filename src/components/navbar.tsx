@@ -225,6 +225,16 @@ export default function Navbar() {
                 </Link>
               );
             })}
+            {profile?.is_admin && (
+              <Link
+                href="/admin"
+                onClick={() => setMobileOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-red-400 hover:bg-red-500/10"
+              >
+                <Shield className="h-4 w-4" />
+                管理后台
+              </Link>
+            )}
           </div>
         </div>
       )}

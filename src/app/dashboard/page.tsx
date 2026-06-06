@@ -199,6 +199,27 @@ export default function DashboardPage() {
           </Card>
         )}
 
+        {/* Admin Entry - Only visible for admins */}
+        {profile?.is_admin && (
+          <Link href="/admin" className="block">
+            <Card className="group relative overflow-hidden border-red-500/20 bg-gradient-to-r from-red-950/40 via-orange-950/30 to-red-950/40 backdrop-blur-sm transition-all duration-300 hover:border-red-500/40 hover:-translate-y-0.5 cursor-pointer">
+              <div className="absolute inset-0">
+                <div className="absolute top-0 right-0 w-40 h-40 bg-red-500/10 rounded-full blur-3xl" />
+              </div>
+              <CardContent className="relative p-5 flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-red-500 to-orange-600 flex items-center justify-center shadow-lg shadow-red-500/20 flex-shrink-0">
+                  <Shield className="w-6 h-6 text-white" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-bold text-base">管理后台</h3>
+                  <p className="text-sm text-muted-foreground">用户管理、算力充值、模型配置</p>
+                </div>
+                <ArrowRight className="w-5 h-5 text-red-400 group-hover:translate-x-1 transition-transform" />
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+
         {/* Not logged in */}
         {!profile && (
           <Card className="border-border/50 bg-card/50 backdrop-blur-sm">
