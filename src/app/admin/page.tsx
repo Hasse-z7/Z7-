@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Users, CreditCard, Zap, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon, Settings, Bug
+  Users, CreditCard, Zap, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon, Settings, Bug, Wallet, Search, Loader2
 } from 'lucide-react';
 
 interface Profile {
@@ -160,6 +160,7 @@ export default function AdminPage() {
             <TabsTrigger value="models"><Cpu className="w-4 h-4 mr-1" />模型</TabsTrigger>
             <TabsTrigger value="system"><Settings className="w-4 h-4 mr-1" />系统</TabsTrigger>
             <TabsTrigger value="selftest"><Shield className="w-4 h-4 mr-1" />自检</TabsTrigger>
+            <TabsTrigger value="recharge"><Wallet className="w-4 h-4 mr-1" />算力充值</TabsTrigger>
           </TabsList>
 
           <div className="mt-6 overflow-x-auto">
@@ -359,6 +360,7 @@ export default function AdminPage() {
           )}
 
           {/* 全功能自检 */}
+          {tab === 'recharge' && <AdminRecharge />}
           {tab === 'selftest' && (
             <div className="space-y-6">
               <Card className="border-cyan-500/20 bg-slate-900/50 backdrop-blur">
@@ -384,6 +386,8 @@ export default function AdminPage() {
               </Card>
             </div>
           )}
+
+          {tab === 'recharge' && <AdminRecharge />}
         </Tabs>
       </div>
     </div>
@@ -575,6 +579,232 @@ function SystemControl() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+// ========== 管理员算力充值组件 ==========
+function AdminRecharge() {
+  const [searchPhone, setSearchPhone] = useState('');
+  const [searching, setSearching] = useState(false);
+  const [recharging, setRecharging] = useState(false);
+  const [userResult, setUserResult] = useState<{
+    id: string;
+    phone: string;
+    email: string;
+    credits: number;
+    free_credits: number;
+    paid_credits: number;
+    vip_level: number;
+    created_at: string;
+  } | null>(null);
+  const [rechargeAmount, setRechargeAmount] = useState('');
+  const [rechargeType, setRechargeType] = useState<'free' | 'paid'>('paid');
+  const [rechargeDesc, setRechargeDesc] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const handleSearch = async () => {
+    if (!searchPhone.trim()) {
+      setMessage({ type: 'error', text: '请输入手机号' });
+      return;
+    }
+    setSearching(true);
+    setMessage(null);
+    setUserResult(null);
+    try {
+      const res = await fetch(`/api/admin/recharge?phone=${encodeURIComponent(searchPhone.trim())}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.error || '查询失败' });
+      } else {
+        setUserResult(data.user);
+      }
+    } catch {
+      setMessage({ type: 'error', text: '网络错误' });
+    } finally {
+      setSearching(false);
+    }
+  };
+
+  const handleRecharge = async () => {
+    if (!userResult) return;
+    const amount = parseInt(rechargeAmount);
+    if (!amount || amount <= 0) {
+      setMessage({ type: 'error', text: '请输入有效的充值算力数量' });
+      return;
+    }
+    if (!rechargeDesc.trim()) {
+      setMessage({ type: 'error', text: '请填写充值说明' });
+      return;
+    }
+    setRecharging(true);
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/recharge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: userResult.id,
+          amount,
+          creditsType: rechargeType,
+          description: rechargeDesc.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.error || '充值失败' });
+      } else {
+        setMessage({ type: 'success', text: `成功充值 ${amount} 算力点（${rechargeType === 'free' ? '免费' : '付费'}）` });
+        // Refresh user data
+        setUserResult(prev => prev ? {
+          ...prev,
+          credits: data.newCredits ?? prev.credits + amount,
+          free_credits: data.newFreeCredits ?? prev.free_credits,
+          paid_credits: data.newPaidCredits ?? prev.paid_credits,
+        } : null);
+        setRechargeAmount('');
+        setRechargeDesc('');
+      }
+    } catch {
+      setMessage({ type: 'error', text: '网络错误' });
+    } finally {
+      setRecharging(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* 搜索区 */}
+      <Card className="border-cyan-500/20 bg-slate-900/50 backdrop-blur">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Wallet className="h-5 w-5 text-cyan-400" />
+            管理员算力充值
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-slate-400">输入用户注册手机号查询账户信息，然后进行算力充值</p>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              placeholder="输入手机号查询..."
+              value={searchPhone}
+              onChange={(e) => setSearchPhone(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              className="flex-1 rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+            />
+            <Button
+              onClick={handleSearch}
+              disabled={searching}
+              className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white"
+            >
+              {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              查询
+            </Button>
+          </div>
+          {message && (
+            <div className={`rounded-md px-4 py-3 text-sm ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+              {message.text}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* 用户信息 + 充值 */}
+      {userResult && (
+        <Card className="border-cyan-500/20 bg-slate-900/50 backdrop-blur">
+          <CardHeader>
+            <CardTitle className="text-lg">用户信息</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="rounded-lg bg-slate-800/50 p-4">
+                <div className="text-xs text-slate-400 mb-1">手机号</div>
+                <div className="text-lg font-semibold text-slate-100">{userResult.phone || '-'}</div>
+              </div>
+              <div className="rounded-lg bg-slate-800/50 p-4">
+                <div className="text-xs text-slate-400 mb-1">邮箱</div>
+                <div className="text-sm font-semibold text-slate-100 truncate">{userResult.email || '-'}</div>
+              </div>
+              <div className="rounded-lg bg-slate-800/50 p-4">
+                <div className="text-xs text-slate-400 mb-1">当前总算力</div>
+                <div className="text-2xl font-bold text-cyan-400">{userResult.credits}</div>
+              </div>
+              <div className="rounded-lg bg-slate-800/50 p-4">
+                <div className="text-xs text-slate-400 mb-1">VIP等级</div>
+                <div className="text-lg font-semibold text-amber-400">Lv.{userResult.vip_level}</div>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-4">
+                <div className="text-xs text-slate-400 mb-1">免费算力</div>
+                <div className="text-xl font-bold text-emerald-400">{userResult.free_credits}</div>
+              </div>
+              <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-4">
+                <div className="text-xs text-slate-400 mb-1">付费算力</div>
+                <div className="text-xl font-bold text-blue-400">{userResult.paid_credits}</div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-700 pt-6">
+              <h3 className="text-base font-semibold text-slate-200 mb-4">充值算力</h3>
+              <div className="space-y-4">
+                <div className="flex gap-4">
+                  <div className="flex-1">
+                    <label className="text-xs text-slate-400 mb-1 block">充值算力数量</label>
+                    <input
+                      type="number"
+                      min="1"
+                      placeholder="输入算力点数"
+                      value={rechargeAmount}
+                      onChange={(e) => setRechargeAmount(e.target.value)}
+                      className="w-full rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                  </div>
+                  <div className="w-40">
+                    <label className="text-xs text-slate-400 mb-1 block">算力类型</label>
+                    <select
+                      value={rechargeType}
+                      onChange={(e) => setRechargeType(e.target.value as 'free' | 'paid')}
+                      className="w-full rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    >
+                      <option value="paid">付费算力</option>
+                      <option value="free">免费算力</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 mb-1 block">充值说明（必填）</label>
+                  <input
+                    type="text"
+                    placeholder="如：管理员手动充值、活动赠送等"
+                    value={rechargeDesc}
+                    onChange={(e) => setRechargeDesc(e.target.value)}
+                    className="w-full rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-slate-400">
+                    充值后总算力：<span className="text-cyan-400 font-semibold">{userResult.credits + (parseInt(rechargeAmount) || 0)}</span> 算力点
+                  </div>
+                  <Button
+                    onClick={handleRecharge}
+                    disabled={recharging || !rechargeAmount || !rechargeDesc.trim()}
+                    className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white"
+                  >
+                    {recharging ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Wallet className="h-4 w-4 mr-2" />}
+                    确认充值
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-500">
+              注册时间：{new Date(userResult.created_at).toLocaleString('zh-CN')}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
