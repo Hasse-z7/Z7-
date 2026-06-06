@@ -387,7 +387,6 @@ export default function AdminPage() {
             </div>
           )}
 
-          {tab === 'recharge' && <AdminRecharge />}
         </Tabs>
       </div>
     </div>
@@ -585,11 +584,13 @@ function SystemControl() {
 
 // ========== 管理员算力充值组件 ==========
 function AdminRecharge() {
-  const [searchPhone, setSearchPhone] = useState('');
+  const [searchInput, setSearchInput] = useState('');
+  const [searchType, setSearchType] = useState<'phone' | 'userId'>('phone');
   const [searching, setSearching] = useState(false);
   const [recharging, setRecharging] = useState(false);
   const [userResult, setUserResult] = useState<{
     id: string;
+    user_id: string;
     phone: string;
     email: string;
     credits: number;
@@ -604,15 +605,18 @@ function AdminRecharge() {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const handleSearch = async () => {
-    if (!searchPhone.trim()) {
-      setMessage({ type: 'error', text: '请输入手机号' });
+    if (!searchInput.trim()) {
+      setMessage({ type: 'error', text: searchType === 'phone' ? '请输入手机号' : '请输入用户ID' });
       return;
     }
     setSearching(true);
     setMessage(null);
     setUserResult(null);
     try {
-      const res = await fetch(`/api/admin/recharge?phone=${encodeURIComponent(searchPhone.trim())}`);
+      const param = searchType === 'phone' 
+        ? `phone=${encodeURIComponent(searchInput.trim())}`
+        : `userId=${encodeURIComponent(searchInput.trim())}`;
+      const res = await fetch(`/api/admin/recharge?${param}`);
       const data = await res.json();
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || '查询失败' });
@@ -683,13 +687,27 @@ function AdminRecharge() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-slate-400">输入用户注册手机号查询账户信息，然后进行算力充值</p>
-          <div className="flex gap-3">
+          <p className="text-sm text-slate-400">通过手机号或用户ID查询账户信息，然后进行算力充值</p>
+          <div className="flex gap-2 items-center">
+            <div className="flex rounded-md overflow-hidden border border-slate-600">
+              <button
+                onClick={() => setSearchType('phone')}
+                className={`px-3 py-2 text-xs font-medium transition-colors ${searchType === 'phone' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >
+                手机号
+              </button>
+              <button
+                onClick={() => setSearchType('userId')}
+                className={`px-3 py-2 text-xs font-medium transition-colors ${searchType === 'userId' ? 'bg-cyan-600 text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+              >
+                用户ID
+              </button>
+            </div>
             <input
               type="text"
-              placeholder="输入手机号查询..."
-              value={searchPhone}
-              onChange={(e) => setSearchPhone(e.target.value)}
+              placeholder={searchType === 'phone' ? '输入手机号查询...' : '输入用户ID查询...'}
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               className="flex-1 rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
             />
@@ -717,7 +735,11 @@ function AdminRecharge() {
             <CardTitle className="text-lg">用户信息</CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <div className="rounded-lg bg-slate-800/50 p-4">
+                <div className="text-xs text-slate-400 mb-1">用户ID</div>
+                <div className="text-xs font-mono text-slate-100 truncate" title={userResult.user_id}>{userResult.user_id?.slice(0, 12)}...</div>
+              </div>
               <div className="rounded-lg bg-slate-800/50 p-4">
                 <div className="text-xs text-slate-400 mb-1">手机号</div>
                 <div className="text-lg font-semibold text-slate-100">{userResult.phone || '-'}</div>
