@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
+import { getSupabaseCredentials, getSupabaseServiceRoleKey } from '@/storage/database/supabase-client';
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 
-const supabaseAdmin = createClient(
-  process.env.COZE_SUPABASE_URL!,
-  process.env.COZE_SUPABASE_SERVICE_ROLE_KEY!
-);
+function getAdminClient() {
+  const { url } = getSupabaseCredentials();
+  const serviceKey = getSupabaseServiceRoleKey();
+  return createClient(url, serviceKey!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 function generateOrderNo(): string {
   const now = new Date();
@@ -25,6 +29,8 @@ export async function GET(request: NextRequest) {
   try {
     const { user } = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: '请先登录' }, { status: 401 });
+
+    const supabaseAdmin = getAdminClient();
 
     // 检查管理员权限（user.id 对应 profiles.user_id）
     const { data: profile } = await supabaseAdmin
@@ -127,6 +133,8 @@ export async function POST(request: NextRequest) {
   try {
     const { user } = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: '请先登录' }, { status: 401 });
+
+    const supabaseAdmin = getAdminClient();
 
     // 检查管理员权限（user.id 对应 profiles.user_id）
     const { data: profile } = await supabaseAdmin

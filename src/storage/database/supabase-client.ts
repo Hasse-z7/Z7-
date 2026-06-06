@@ -15,16 +15,8 @@ function loadEnv(): void {
   }
 
   try {
-    try {
-      require('dotenv').config();
-      if (process.env.COZE_SUPABASE_URL && process.env.COZE_SUPABASE_ANON_KEY) {
-        envLoaded = true;
-        return;
-      }
-    } catch {
-      // dotenv not available
-    }
-
+    // Next.js automatically loads .env.local at build time.
+    // For non-Next.js contexts, use Python coze_workload_identity to get env vars.
     const pythonCode = `
 import os
 import sys
@@ -64,7 +56,7 @@ except Exception as e:
 
     envLoaded = true;
   } catch {
-    // Silently fail
+    // Silently fail — Next.js already loaded .env.local
   }
 }
 

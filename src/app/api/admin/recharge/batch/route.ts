@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthUser } from '@/lib/auth-helpers';
-import { createClient } from '@supabase/supabase-js';
+import { getSupabaseClient, getSupabaseServiceRoleKey, getSupabaseCredentials } from '@/storage/database/supabase-client';
 import { randomUUID } from 'crypto';
 
-const supabaseAdmin = createClient(
-  process.env.COZE_SUPABASE_URL!,
-  process.env.COZE_SUPABASE_SERVICE_ROLE_KEY!
-);
+function getAdminClient() {
+  const { url } = getSupabaseCredentials();
+  const serviceKey = getSupabaseServiceRoleKey();
+  const { createClient } = require('@supabase/supabase-js');
+  return createClient(url, serviceKey!, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
+}
 
 // 赠送算力计算（与前端一致）
 function calcBonusCredits(yuan: number): number {
@@ -51,6 +55,8 @@ export async function POST(request: NextRequest) {
   try {
     const { user } = await getAuthUser(request);
     if (!user) return NextResponse.json({ error: '请先登录' }, { status: 401 });
+
+    const supabaseAdmin = getAdminClient();
 
     const { data: profile } = await supabaseAdmin
       .from('profiles')
