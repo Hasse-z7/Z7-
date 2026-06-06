@@ -583,6 +583,38 @@ function SystemControl() {
 }
 
 // ========== 管理员算力充值组件 ==========
+// VIP等级规则：按累计充值付费算力计算
+const VIP_LEVELS = [
+  { level: 'free', name: '免费', threshold: 0, icon: '⚪' },
+  { level: 'vip1', name: 'VIP1', threshold: 500, icon: '🥉' },
+  { level: 'vip2', name: 'VIP2', threshold: 2000, icon: '🥈' },
+  { level: 'vip3', name: 'VIP3', threshold: 5000, icon: '🥇' },
+  { level: 'vip4', name: 'VIP4', threshold: 10000, icon: '💎' },
+  { level: 'vip5', name: 'VIP5', threshold: 30000, icon: '👑' },
+];
+
+// 充值套餐：1元=10算力点，固定额度
+const RECHARGE_PACKAGES = [
+  { label: '¥10', amount: 100, bonus: 0, total: 100 },
+  { label: '¥50', amount: 500, bonus: 20, total: 520 },
+  { label: '¥100', amount: 1000, bonus: 80, total: 1080, popular: true },
+  { label: '¥300', amount: 3000, bonus: 300, total: 3300 },
+  { label: '¥500', amount: 5000, bonus: 600, total: 5600 },
+];
+
+function getVipInfo(totalRecharged: number) {
+  let current = VIP_LEVELS[0];
+  let next: typeof VIP_LEVELS[number] | null = null;
+  for (let i = VIP_LEVELS.length - 1; i >= 0; i--) {
+    if (totalRecharged >= VIP_LEVELS[i].threshold) {
+      current = VIP_LEVELS[i];
+      next = i < VIP_LEVELS.length - 1 ? VIP_LEVELS[i + 1] : null;
+      break;
+    }
+  }
+  return { current, next };
+}
+
 function AdminRecharge() {
   const [searchInput, setSearchInput] = useState('');
   const [searchType, setSearchType] = useState<'phone' | 'userId'>('phone');
@@ -590,16 +622,17 @@ function AdminRecharge() {
   const [recharging, setRecharging] = useState(false);
   const [userResult, setUserResult] = useState<{
     id: string;
-    user_id: string;
+    nickname: string;
     phone: string;
     email: string;
     credits: number;
     free_credits: number;
     paid_credits: number;
-    vip_level: number;
+    vip_level: string;
+    total_recharged: number;
     created_at: string;
   } | null>(null);
-  const [rechargeAmount, setRechargeAmount] = useState('');
+  const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
   const [rechargeType, setRechargeType] = useState<'free' | 'paid'>('paid');
   const [rechargeDesc, setRechargeDesc] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -612,8 +645,9 @@ function AdminRecharge() {
     setSearching(true);
     setMessage(null);
     setUserResult(null);
+    setSelectedPackage(null);
     try {
-      const param = searchType === 'phone' 
+      const param = searchType === 'phone'
         ? `phone=${encodeURIComponent(searchInput.trim())}`
         : `userId=${encodeURIComponent(searchInput.trim())}`;
       const res = await fetch(`/api/admin/recharge?${param}`, {
@@ -623,7 +657,19 @@ function AdminRecharge() {
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || '查询失败' });
       } else {
-        setUserResult(data.user);
+        // Merge user + profile data
+        setUserResult({
+          id: data.user.id,
+          nickname: data.user.nickname || '未知用户',
+          phone: data.user.phone || '-',
+          email: data.user.email || '-',
+          credits: data.profile?.credits || 0,
+          free_credits: data.profile?.free_credits || 0,
+          paid_credits: data.profile?.paid_credits || 0,
+          vip_level: data.profile?.vip_level || 'free',
+          total_recharged: data.profile?.total_recharged || 0,
+          created_at: data.user.created_at || '',
+        });
       }
     } catch {
       setMessage({ type: 'error', text: '网络错误' });
@@ -634,15 +680,16 @@ function AdminRecharge() {
 
   const handleRecharge = async () => {
     if (!userResult) return;
-    const amount = parseInt(rechargeAmount);
-    if (!amount || amount <= 0) {
-      setMessage({ type: 'error', text: '请输入有效的充值算力数量' });
+    if (selectedPackage === null) {
+      setMessage({ type: 'error', text: '请选择充值套餐' });
       return;
     }
     if (!rechargeDesc.trim()) {
       setMessage({ type: 'error', text: '请填写充值说明' });
       return;
     }
+    const pkg = RECHARGE_PACKAGES[selectedPackage];
+    const creditsAmount = pkg.total;
     setRecharging(true);
     setMessage(null);
     try {
@@ -651,24 +698,25 @@ function AdminRecharge() {
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify({
           userId: userResult.id,
-          amount,
+          amount: creditsAmount,
           creditsType: rechargeType,
-          description: rechargeDesc.trim(),
+          description: `${rechargeDesc.trim()}（${pkg.label}套餐，含赠送${pkg.bonus}算力）`,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || '充值失败' });
       } else {
-        setMessage({ type: 'success', text: `成功充值 ${amount} 算力点（${rechargeType === 'free' ? '免费' : '付费'}）` });
-        // Refresh user data
+        setMessage({ type: 'success', text: `成功充值 ${creditsAmount} 算力点（${pkg.label}套餐）` });
         setUserResult(prev => prev ? {
           ...prev,
-          credits: data.newCredits ?? prev.credits + amount,
+          credits: data.newCredits ?? prev.credits + creditsAmount,
           free_credits: data.newFreeCredits ?? prev.free_credits,
           paid_credits: data.newPaidCredits ?? prev.paid_credits,
+          vip_level: data.newVipLevel ?? prev.vip_level,
+          total_recharged: (prev.total_recharged || 0) + (rechargeType === 'paid' ? creditsAmount : 0),
         } : null);
-        setRechargeAmount('');
+        setSelectedPackage(null);
         setRechargeDesc('');
       }
     } catch {
@@ -677,6 +725,9 @@ function AdminRecharge() {
       setRecharging(false);
     }
   };
+
+  const selectedPkg = selectedPackage !== null ? RECHARGE_PACKAGES[selectedPackage] : null;
+  const vipInfo = getVipInfo(userResult?.total_recharged || 0);
 
   return (
     <div className="space-y-6">
@@ -689,7 +740,7 @@ function AdminRecharge() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <p className="text-sm text-slate-400">通过手机号或用户ID查询账户信息，然后进行算力充值</p>
+          <p className="text-sm text-slate-400">通过手机号查询已注册账户，选择套餐进行算力充值</p>
           <div className="flex gap-2 items-center">
             <div className="flex rounded-md overflow-hidden border border-slate-600">
               <button
@@ -722,7 +773,7 @@ function AdminRecharge() {
               查询
             </Button>
           </div>
-          {message && (
+          {message && !userResult && (
             <div className={`rounded-md px-4 py-3 text-sm ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
               {message.text}
             </div>
@@ -733,98 +784,174 @@ function AdminRecharge() {
       {/* 用户信息 + 充值 */}
       {userResult && (
         <Card className="border-cyan-500/20 bg-slate-900/50 backdrop-blur">
-          <CardHeader>
-            <CardTitle className="text-lg">用户信息</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              <div className="rounded-lg bg-slate-800/50 p-4">
-                <div className="text-xs text-slate-400 mb-1">用户ID</div>
-                <div className="text-xs font-mono text-slate-100 truncate" title={userResult.user_id}>{userResult.user_id?.slice(0, 12)}...</div>
+          <CardContent className="p-6 space-y-6">
+            {/* 用户信息概览 */}
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-lg font-bold text-white flex-shrink-0">
+                {userResult.nickname.charAt(0).toUpperCase()}
               </div>
-              <div className="rounded-lg bg-slate-800/50 p-4">
-                <div className="text-xs text-slate-400 mb-1">手机号</div>
-                <div className="text-lg font-semibold text-slate-100">{userResult.phone || '-'}</div>
-              </div>
-              <div className="rounded-lg bg-slate-800/50 p-4">
-                <div className="text-xs text-slate-400 mb-1">邮箱</div>
-                <div className="text-sm font-semibold text-slate-100 truncate">{userResult.email || '-'}</div>
-              </div>
-              <div className="rounded-lg bg-slate-800/50 p-4">
-                <div className="text-xs text-slate-400 mb-1">当前总算力</div>
-                <div className="text-2xl font-bold text-cyan-400">{userResult.credits}</div>
-              </div>
-              <div className="rounded-lg bg-slate-800/50 p-4">
-                <div className="text-xs text-slate-400 mb-1">VIP等级</div>
-                <div className="text-lg font-semibold text-amber-400">Lv.{userResult.vip_level}</div>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="rounded-lg bg-emerald-500/5 border border-emerald-500/20 p-4">
-                <div className="text-xs text-slate-400 mb-1">免费算力</div>
-                <div className="text-xl font-bold text-emerald-400">{userResult.free_credits}</div>
-              </div>
-              <div className="rounded-lg bg-blue-500/5 border border-blue-500/20 p-4">
-                <div className="text-xs text-slate-400 mb-1">付费算力</div>
-                <div className="text-xl font-bold text-blue-400">{userResult.paid_credits}</div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-semibold text-slate-100 truncate">{userResult.nickname}</h3>
+                  <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-medium">
+                    {vipInfo.current.icon} {vipInfo.current.name}
+                  </span>
+                </div>
+                <div className="text-sm text-slate-400 mt-0.5">
+                  {userResult.phone !== '-' && <span>{userResult.phone}</span>}
+                  {userResult.phone !== '-' && userResult.email !== '-' && <span className="mx-2">|</span>}
+                  {userResult.email !== '-' && <span>{userResult.email}</span>}
+                </div>
               </div>
             </div>
 
-            <div className="border-t border-slate-700 pt-6">
-              <h3 className="text-base font-semibold text-slate-200 mb-4">充值算力</h3>
-              <div className="space-y-4">
-                <div className="flex gap-4">
-                  <div className="flex-1">
-                    <label className="text-xs text-slate-400 mb-1 block">充值算力数量</label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="输入算力点数"
-                      value={rechargeAmount}
-                      onChange={(e) => setRechargeAmount(e.target.value)}
-                      className="w-full rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    />
-                  </div>
-                  <div className="w-40">
-                    <label className="text-xs text-slate-400 mb-1 block">算力类型</label>
-                    <select
-                      value={rechargeType}
-                      onChange={(e) => setRechargeType(e.target.value as 'free' | 'paid')}
-                      className="w-full rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                    >
-                      <option value="paid">付费算力</option>
-                      <option value="free">免费算力</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-400 mb-1 block">充值说明（必填）</label>
-                  <input
-                    type="text"
-                    placeholder="如：管理员手动充值、活动赠送等"
-                    value={rechargeDesc}
-                    onChange={(e) => setRechargeDesc(e.target.value)}
-                    className="w-full rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-slate-400">
-                    充值后总算力：<span className="text-cyan-400 font-semibold">{userResult.credits + (parseInt(rechargeAmount) || 0)}</span> 算力点
-                  </div>
-                  <Button
-                    onClick={handleRecharge}
-                    disabled={recharging || !rechargeAmount || !rechargeDesc.trim()}
-                    className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white"
-                  >
-                    {recharging ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Wallet className="h-4 w-4 mr-2" />}
-                    确认充值
-                  </Button>
-                </div>
+            {/* 算力概览 */}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="rounded-xl bg-cyan-500/5 border border-cyan-500/15 p-4 text-center">
+                <div className="text-xs text-slate-400 mb-1">总算力</div>
+                <div className="text-2xl font-bold text-cyan-400">{userResult.credits || 0}</div>
+              </div>
+              <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/15 p-4 text-center">
+                <div className="text-xs text-slate-400 mb-1">免费算力</div>
+                <div className="text-2xl font-bold text-emerald-400">{userResult.free_credits || 0}</div>
+              </div>
+              <div className="rounded-xl bg-violet-500/5 border border-violet-500/15 p-4 text-center">
+                <div className="text-xs text-slate-400 mb-1">付费算力</div>
+                <div className="text-2xl font-bold text-violet-400">{userResult.paid_credits || 0}</div>
               </div>
             </div>
+
+            {/* VIP进度 */}
+            <div className="rounded-xl bg-slate-800/50 p-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-slate-400">VIP等级进度</span>
+                <span className="text-xs text-slate-400">
+                  累计充值 <span className="text-amber-400 font-medium">{userResult.total_recharged || 0}</span> 算力
+                  {vipInfo.next && <> · 距{vipInfo.next.name}还需 <span className="text-amber-400 font-medium">{vipInfo.next.threshold - (userResult.total_recharged || 0)}</span></>}
+                </span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div
+                  className="bg-gradient-to-r from-amber-500 to-orange-500 rounded-full h-2 transition-all duration-500"
+                  style={{
+                    width: vipInfo.next
+                      ? `${Math.min(100, ((userResult.total_recharged || 0) / vipInfo.next.threshold) * 100)}%`
+                      : '100%',
+                  }}
+                />
+              </div>
+              <div className="flex justify-between mt-2">
+                {VIP_LEVELS.map((v) => (
+                  <span
+                    key={v.level}
+                    className={`text-[10px] ${userResult.vip_level === v.level ? 'text-amber-400 font-bold' : 'text-slate-500'}`}
+                  >
+                    {v.icon}{v.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* 充值区域 */}
+            <div className="border-t border-slate-700 pt-6">
+              <h4 className="text-base font-semibold text-slate-200 mb-4">选择充值套餐</h4>
+
+              {/* 套餐选择 */}
+              <div className="grid grid-cols-5 gap-3 mb-4">
+                {RECHARGE_PACKAGES.map((pkg, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setSelectedPackage(idx)}
+                    className={`relative rounded-xl p-4 text-center border-2 transition-all duration-200 ${
+                      selectedPackage === idx
+                        ? 'border-cyan-500 bg-cyan-500/10 shadow-lg shadow-cyan-500/10'
+                        : 'border-slate-600 bg-slate-800/50 hover:border-slate-500'
+                    }`}
+                  >
+                    {pkg.popular && (
+                      <div className="absolute -top-2 left-1/2 -translate-x-1/2 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-[10px] px-2 py-0.5 rounded-full font-medium">
+                        推荐
+                      </div>
+                    )}
+                    <div className="text-lg font-bold text-slate-100">{pkg.label}</div>
+                    <div className="text-sm text-cyan-400 font-medium mt-1">{pkg.total}算力</div>
+                    {pkg.bonus > 0 && (
+                      <div className="text-[10px] text-emerald-400 mt-0.5">+赠{pkg.bonus}</div>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* 算力类型 */}
+              <div className="flex gap-3 mb-4">
+                <button
+                  onClick={() => setRechargeType('paid')}
+                  className={`flex-1 rounded-lg py-2.5 text-sm font-medium border transition-all ${
+                    rechargeType === 'paid'
+                      ? 'border-violet-500 bg-violet-500/10 text-violet-400'
+                      : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  付费算力（计入VIP）
+                </button>
+                <button
+                  onClick={() => setRechargeType('free')}
+                  className={`flex-1 rounded-lg py-2.5 text-sm font-medium border transition-all ${
+                    rechargeType === 'free'
+                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-400'
+                      : 'border-slate-600 bg-slate-800/50 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  免费算力（活动赠送）
+                </button>
+              </div>
+
+              {/* 充值说明 */}
+              <div className="mb-4">
+                <label className="text-xs text-slate-400 mb-1 block">充值说明（必填）</label>
+                <input
+                  type="text"
+                  placeholder="如：管理员手动充值、活动赠送等"
+                  value={rechargeDesc}
+                  onChange={(e) => setRechargeDesc(e.target.value)}
+                  className="w-full rounded-md border border-slate-600 bg-slate-800 px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+              </div>
+
+              {/* 充值预览 + 确认 */}
+              <div className="flex items-center justify-between rounded-xl bg-slate-800/50 p-4">
+                <div>
+                  <div className="text-sm text-slate-400">
+                    {selectedPkg ? (
+                      <>
+                        充值后总算力：<span className="text-cyan-400 font-bold text-lg">{(userResult.credits || 0) + selectedPkg.total}</span> 算力点
+                        <span className="text-xs text-slate-500 ml-2">（当前 {userResult.credits || 0} + {selectedPkg.total}）</span>
+                      </>
+                    ) : (
+                      <>请先选择充值套餐</>
+                    )}
+                  </div>
+                </div>
+                <Button
+                  onClick={handleRecharge}
+                  disabled={recharging || selectedPackage === null || !rechargeDesc.trim()}
+                  className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white"
+                >
+                  {recharging ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Wallet className="h-4 w-4 mr-2" />}
+                  确认充值
+                </Button>
+              </div>
+            </div>
+
+            {/* 操作结果提示 */}
+            {message && userResult && (
+              <div className={`rounded-md px-4 py-3 text-sm ${message.type === 'success' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-red-500/10 text-red-400 border border-red-500/20'}`}>
+                {message.text}
+              </div>
+            )}
 
             <div className="text-xs text-slate-500">
-              注册时间：{new Date(userResult.created_at).toLocaleString('zh-CN')}
+              注册时间：{userResult.created_at ? new Date(userResult.created_at).toLocaleString('zh-CN') : '未知'}
             </div>
           </CardContent>
         </Card>

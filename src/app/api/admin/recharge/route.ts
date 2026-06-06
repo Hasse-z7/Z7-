@@ -86,9 +86,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       user: {
         id: targetUserId,
+        nickname: targetProfile.nickname || targetProfile.display_name || authUser?.user?.user_metadata?.name || `用户${(authUser?.user?.phone || '').slice(-4)}`,
         email: authUser?.user?.email || '',
         phone: authUser?.user?.phone || authUser?.user?.user_metadata?.phone || '',
-        display_name: targetProfile.display_name || authUser?.user?.user_metadata?.name || '',
         avatar_url: targetProfile.avatar_url || '',
         created_at: authUser?.user?.created_at || '',
       },
@@ -96,8 +96,9 @@ export async function GET(request: NextRequest) {
         credits: targetProfile.credits || 0,
         free_credits: targetProfile.free_credits || 0,
         paid_credits: targetProfile.paid_credits || 0,
-        vip_level: targetProfile.vip_level || 0,
+        vip_level: targetProfile.vip_level || 'free',
         is_admin: targetProfile.is_admin || false,
+        total_recharged: targetProfile.total_recharged || 0,
       },
       transactions: transactions || [],
       orders: orders || [],
@@ -140,61 +141,51 @@ export async function POST(request: NextRequest) {
     const field = type === 'free' ? 'free_credits' : 'paid_credits';
     const desc = description || `管理员充值(${type === 'free' ? '免费' : '付费'}算力)`;
 
-    // 原子更新算力
-    const { data: updatedProfile, error: updateError } = await supabaseAdmin
+    // 读取当前算力（读-改-写，兼容无RPC的情况）
+    const { data: currentProfile } = await supabaseAdmin
       .from('profiles')
-      .update({
-        [field]: supabaseAdmin.rpc('add_credits', { row_id: userId, field_name: field, add_amount: amount }),
-      })
-      .eq('id', userId)
-      .select()
+      .select('free_credits, paid_credits, credits, total_recharged')
+      .eq('user_id', userId)
       .single();
 
-    // 如果 rpc 不可用，用读-改-写方式
-    if (updateError) {
-      const { data: currentProfile } = await supabaseAdmin
-        .from('profiles')
-        .select(field)
-        .eq('id', userId)
-        .single();
+    if (!currentProfile) {
+      return NextResponse.json({ error: '用户不存在' }, { status: 404 });
+    }
 
-      if (!currentProfile) {
-        return NextResponse.json({ error: '用户不存在' }, { status: 404 });
-      }
+    const currentFieldVal = (currentProfile as Record<string, unknown>)[field] as number || 0;
+    const newFieldVal = currentFieldVal + amount;
+    const newFree = type === 'free' ? newFieldVal : (currentProfile.free_credits || 0);
+    const newPaid = type === 'paid' ? newFieldVal : (currentProfile.paid_credits || 0);
+    const newTotal = newFree + newPaid;
+    const newTotalRecharged = (currentProfile.total_recharged || 0) + (type === 'paid' ? amount : 0);
 
-      const newCredits = ((currentProfile as Record<string, unknown>)[field] as number || 0) + amount;
+    // 计算 VIP 等级（按累计充值付费算力）
+    let newVipLevel = 'free';
+    if (newTotalRecharged >= 30000) newVipLevel = 'vip5';
+    else if (newTotalRecharged >= 10000) newVipLevel = 'vip4';
+    else if (newTotalRecharged >= 5000) newVipLevel = 'vip3';
+    else if (newTotalRecharged >= 2000) newVipLevel = 'vip2';
+    else if (newTotalRecharged >= 500) newVipLevel = 'vip1';
 
-      const { error: writeError } = await supabaseAdmin
-        .from('profiles')
-        .update({ [field]: newCredits })
-        .eq('id', userId);
+    const { error: writeError } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        [field]: newFieldVal,
+        credits: newTotal,
+        total_recharged: newTotalRecharged,
+        vip_level: newVipLevel,
+      })
+      .eq('user_id', userId);
 
-      if (writeError) {
-        return NextResponse.json({ error: '充值失败' }, { status: 500 });
-      }
-
-      // 记录流水
-      await supabaseAdmin.from('credits_transactions').insert({
-        user_id: userId,
-        amount: amount,
-        balance_after: newCredits,
-        type: 'recharge',
-        credits_type: type,
-        description: desc,
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: `成功充值${amount}算力`,
-        new_balance: newCredits,
-      });
+    if (writeError) {
+      return NextResponse.json({ error: '充值失败' }, { status: 500 });
     }
 
     // 记录流水
     await supabaseAdmin.from('credits_transactions').insert({
       user_id: userId,
       amount: amount,
-      balance_after: updatedProfile?.[field] || 0,
+      balance_after: newTotal,
       type: 'recharge',
       credits_type: type,
       description: desc,
@@ -203,7 +194,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: `成功充值${amount}算力`,
-      new_balance: updatedProfile?.[field] || 0,
+      newCredits: newTotal,
+      newFreeCredits: newFree,
+      newPaidCredits: newPaid,
+      newVipLevel: newVipLevel,
     });
   } catch (err) {
     console.error('Admin recharge error:', err);
