@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth, getAuthHeaders } from '@/contexts/auth-context';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Users, CreditCard, Zap, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon, Settings, Bug, Wallet, Search, Loader2
+  Users, CreditCard, Zap, Shield, Cpu, Plus, Trash2, Edit2, Check, X as XIcon, Settings, Bug, Wallet, Search, Loader2, Upload, Download
 } from 'lucide-react';
 
 interface Profile {
@@ -595,12 +595,29 @@ const VIP_LEVELS = [
 
 // 充值套餐：1元=10算力点，固定额度
 const RECHARGE_PACKAGES = [
-  { label: '¥10', amount: 100, bonus: 0, total: 100 },
-  { label: '¥50', amount: 500, bonus: 20, total: 520 },
-  { label: '¥100', amount: 1000, bonus: 80, total: 1080, popular: true },
-  { label: '¥300', amount: 3000, bonus: 300, total: 3300 },
-  { label: '¥500', amount: 5000, bonus: 600, total: 5600 },
+  { label: '¥10', price: 10, amount: 100, bonus: 0, total: 100 },
+  { label: '¥50', price: 50, amount: 500, bonus: 20, total: 520 },
+  { label: '¥100', price: 100, amount: 1000, bonus: 80, total: 1080, popular: true },
+  { label: '¥300', price: 300, amount: 3000, bonus: 300, total: 3300 },
+  { label: '¥500', price: 500, amount: 5000, bonus: 600, total: 5600 },
 ];
+
+// 自定义充值：1元=10算力，最低1元，无赠送
+const CUSTOM_MIN_YUAN = 1;
+
+// 计算自定义充值的算力（无赠送）
+function calcCustomCredits(yuan: number): number {
+  return Math.floor(yuan * 10);
+}
+
+// 根据充值金额计算赠送算力（匹配套餐梯度）
+function calcBonusCredits(yuan: number): number {
+  if (yuan >= 500) return Math.floor(yuan * 0.12); // 12%赠送
+  if (yuan >= 300) return Math.floor(yuan * 0.10); // 10%赠送
+  if (yuan >= 100) return Math.floor(yuan * 0.08); // 8%赠送
+  if (yuan >= 50) return Math.floor(yuan * 0.04);  // 4%赠送
+  return 0; // 10元以下无赠送
+}
 
 function getVipInfo(totalRecharged: number) {
   let current = VIP_LEVELS[0];
@@ -633,9 +650,15 @@ function AdminRecharge() {
     created_at: string;
   } | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<number | null>(null);
+  const [isCustomPackage, setIsCustomPackage] = useState(false);
+  const [customYuan, setCustomYuan] = useState<number>(10);
   const [rechargeType, setRechargeType] = useState<'free' | 'paid'>('paid');
   const [rechargeDesc, setRechargeDesc] = useState('');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  // 批量充值
+  const [batchUploading, setBatchUploading] = useState(false);
+  const [batchResult, setBatchResult] = useState<{ success: number; failed: number; details: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSearch = async () => {
     if (!searchInput.trim()) {
@@ -680,12 +703,25 @@ function AdminRecharge() {
 
   const handleRecharge = async () => {
     if (!userResult) return;
-    if (selectedPackage === null) {
+    if (!isCustomPackage && selectedPackage === null) {
       setMessage({ type: 'error', text: '请选择充值套餐' });
       return;
     }
-    const pkg = RECHARGE_PACKAGES[selectedPackage];
-    const creditsAmount = pkg.total;
+    if (isCustomPackage && (!customYuan || customYuan < CUSTOM_MIN_YUAN)) {
+      setMessage({ type: 'error', text: `自定义充值最低${CUSTOM_MIN_YUAN}元` });
+      return;
+    }
+    let creditsAmount: number;
+    let descLabel: string;
+    if (isCustomPackage) {
+      const bonus = calcBonusCredits(customYuan);
+      creditsAmount = calcCustomCredits(customYuan) + bonus;
+      descLabel = `¥${customYuan}自定义充值${bonus > 0 ? `（含赠送${bonus}算力）` : ''}`;
+    } else {
+      const pkg = RECHARGE_PACKAGES[selectedPackage!];
+      creditsAmount = pkg.total;
+      descLabel = `${pkg.label}套餐${pkg.bonus > 0 ? `（含赠送${pkg.bonus}算力）` : ''}`;
+    }
     setRecharging(true);
     setMessage(null);
     try {
@@ -696,14 +732,14 @@ function AdminRecharge() {
           userId: userResult.id,
           amount: creditsAmount,
           creditsType: rechargeType,
-          description: `${rechargeDesc.trim() || '管理员手动充值'}（${pkg.label}套餐，含赠送${pkg.bonus}算力）`,
+          description: `${rechargeDesc.trim() || '管理员手动充值'}（${descLabel}）`,
         }),
       });
       const data = await res.json();
       if (!res.ok) {
         setMessage({ type: 'error', text: data.error || '充值失败' });
       } else {
-        setMessage({ type: 'success', text: `成功充值 ${creditsAmount} 算力点（${pkg.label}套餐）` });
+        setMessage({ type: 'success', text: `成功充值 ${creditsAmount} 算力点（${descLabel}）` });
         setUserResult(prev => prev ? {
           ...prev,
           credits: data.newCredits ?? prev.credits + creditsAmount,
@@ -713,6 +749,8 @@ function AdminRecharge() {
           total_recharged: (prev.total_recharged || 0) + (rechargeType === 'paid' ? creditsAmount : 0),
         } : null);
         setSelectedPackage(null);
+        setIsCustomPackage(false);
+        setCustomYuan(10);
         setRechargeDesc('');
       }
     } catch {
@@ -722,8 +760,78 @@ function AdminRecharge() {
     }
   };
 
-  const selectedPkg = selectedPackage !== null ? RECHARGE_PACKAGES[selectedPackage] : null;
+  const selectedPkg = !isCustomPackage && selectedPackage !== null ? RECHARGE_PACKAGES[selectedPackage] : null;
+  const customBonus = isCustomPackage ? calcBonusCredits(customYuan) : 0;
+  const customTotal = isCustomPackage ? calcCustomCredits(customYuan) + customBonus : 0;
+  const currentCreditsAmount = isCustomPackage ? customTotal : (selectedPkg?.total ?? 0);
   const vipInfo = getVipInfo(userResult?.total_recharged || 0);
+
+  // 下载批量充值模板
+  const handleDownloadTemplate = () => {
+    const csv = '\uFEFF手机号,充值金额(元),算力类型(付费/免费),充值说明\n13100001111,100,付费,管理员充值\n13100002222,50,免费,活动赠送\n13100003333,10,付费,\n';
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '批量充值模板.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // 上传批量充值文件
+  const handleBatchUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBatchUploading(true);
+    setBatchResult(null);
+    setMessage(null);
+    try {
+      const text = await file.text();
+      const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+      if (lines.length < 2) {
+        setMessage({ type: 'error', text: '模板文件为空或格式错误' });
+        return;
+      }
+      // 跳过标题行
+      const rows = lines.slice(1);
+      const formData = rows.map(row => {
+        const cols = row.split(',');
+        return {
+          phone: (cols[0] || '').trim(),
+          amount_yuan: parseFloat(cols[1]) || 0,
+          credits_type: (cols[2] || '').trim().includes('免费') ? 'free' : 'paid',
+          description: (cols[3] || '').trim() || '批量充值',
+        };
+      }).filter(r => r.phone && r.amount_yuan >= CUSTOM_MIN_YUAN);
+
+      if (formData.length === 0) {
+        setMessage({ type: 'error', text: '模板中无有效数据行' });
+        return;
+      }
+
+      const res = await fetch('/api/admin/recharge/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ items: formData }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setMessage({ type: 'error', text: data.error || '批量充值失败' });
+      } else {
+        setBatchResult(data.result);
+        setMessage({ type: 'success', text: `批量充值完成：成功 ${data.result.success} 人，失败 ${data.result.failed} 人` });
+        // 刷新当前搜索结果
+        if (userResult) {
+          handleSearch();
+        }
+      }
+    } catch {
+      setMessage({ type: 'error', text: '文件读取失败' });
+    } finally {
+      setBatchUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -853,13 +961,13 @@ function AdminRecharge() {
               <h4 className="text-base font-semibold text-slate-200 mb-4">选择充值套餐</h4>
 
               {/* 套餐选择 */}
-              <div className="grid grid-cols-5 gap-3 mb-4">
+              <div className="grid grid-cols-3 gap-3 mb-4">
                 {RECHARGE_PACKAGES.map((pkg, idx) => (
                   <button
                     key={idx}
-                    onClick={() => setSelectedPackage(idx)}
+                    onClick={() => { setSelectedPackage(idx); setIsCustomPackage(false); }}
                     className={`relative rounded-xl p-4 text-center border-2 transition-all duration-200 ${
-                      selectedPackage === idx
+                      !isCustomPackage && selectedPackage === idx
                         ? 'border-cyan-500 bg-cyan-500/10 shadow-lg shadow-cyan-500/10'
                         : 'border-slate-600 bg-slate-800/50 hover:border-slate-500'
                     }`}
@@ -876,7 +984,41 @@ function AdminRecharge() {
                     )}
                   </button>
                 ))}
+                {/* 自定义金额 */}
+                <button
+                  onClick={() => { setIsCustomPackage(true); setSelectedPackage(null); }}
+                  className={`relative rounded-xl p-4 text-center border-2 transition-all duration-200 ${
+                    isCustomPackage
+                      ? 'border-amber-500 bg-amber-500/10 shadow-lg shadow-amber-500/10'
+                      : 'border-slate-600 bg-slate-800/50 hover:border-slate-500'
+                  }`}
+                >
+                  <div className="text-lg font-bold text-amber-400">任意金额</div>
+                  <div className="text-xs text-slate-400 mt-1">自定义充值</div>
+                  <div className="text-[10px] text-slate-500 mt-0.5">最低¥{CUSTOM_MIN_YUAN}</div>
+                </button>
               </div>
+
+              {/* 自定义金额输入 */}
+              {isCustomPackage && (
+                <div className="mb-4 p-4 rounded-xl bg-amber-500/5 border border-amber-500/20">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm text-slate-400">充值金额：</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-amber-400 font-medium">¥</span>
+                      <input
+                        type="number"
+                        min={CUSTOM_MIN_YUAN}
+                        value={customYuan}
+                        onChange={(e) => setCustomYuan(Math.max(CUSTOM_MIN_YUAN, Number(e.target.value) || CUSTOM_MIN_YUAN))}
+                        className="w-24 rounded-md border border-slate-600 bg-slate-800 px-3 py-1.5 text-sm text-slate-100 text-center focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                    <span className="text-xs text-slate-500">= {calcCustomCredits(customYuan)}算力{customBonus > 0 ? ` + 赠${customBonus}` : ''} = {customTotal}算力</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2">1元=10算力，满50元享4%赠、满100元8%赠、满300元10%赠、满500元12%赠</div>
+                </div>
+              )}
 
               {/* 算力类型 */}
               <div className="flex gap-3 mb-4">
@@ -918,24 +1060,77 @@ function AdminRecharge() {
               <div className="flex items-center justify-between rounded-xl bg-slate-800/50 p-4">
                 <div>
                   <div className="text-sm text-slate-400">
-                    {selectedPkg ? (
+                    {(isCustomPackage || selectedPkg) ? (
                       <>
-                        充值后总算力：<span className="text-cyan-400 font-bold text-lg">{(userResult.credits || 0) + selectedPkg.total}</span> 算力点
-                        <span className="text-xs text-slate-500 ml-2">（当前 {userResult.credits || 0} + {selectedPkg.total}）</span>
+                        充值后总算力：<span className="text-cyan-400 font-bold text-lg">{(userResult.credits || 0) + currentCreditsAmount}</span> 算力点
+                        <span className="text-xs text-slate-500 ml-2">（当前 {userResult.credits || 0} + {currentCreditsAmount}）</span>
                       </>
                     ) : (
-                      <>请先选择充值套餐</>
+                      <>请先选择充值套餐或自定义金额</>
                     )}
                   </div>
                 </div>
                 <Button
                   onClick={handleRecharge}
-                  disabled={recharging || selectedPackage === null}
+                  disabled={recharging || (!isCustomPackage && selectedPackage === null)}
                   className="bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white"
                 >
                   {recharging ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Wallet className="h-4 w-4 mr-2" />}
                   确认充值
                 </Button>
+              </div>
+            </div>
+
+            {/* 批量充值区域 */}
+            <div className="border-t border-slate-700 pt-6">
+              <h4 className="text-base font-semibold text-slate-200 mb-4 flex items-center gap-2">
+                <Upload className="h-4 w-4 text-amber-400" />
+                批量充值
+              </h4>
+              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-3">
+                <p className="text-xs text-slate-400">
+                  下载模板 → 填写手机号和充值金额 → 上传文件批量充值。充值比例与单次充值一致（1元=10算力），赠送规则同上。
+                </p>
+                <div className="flex gap-3">
+                  <Button
+                    onClick={handleDownloadTemplate}
+                    variant="outline"
+                    className="border-amber-500/30 text-amber-400 hover:bg-amber-500/10"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    下载模板
+                  </Button>
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={batchUploading}
+                    className="bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white"
+                  >
+                    {batchUploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                    上传充值文件
+                  </Button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv"
+                    onChange={handleBatchUpload}
+                    className="hidden"
+                  />
+                </div>
+                {batchResult && (
+                  <div className="text-xs space-y-1">
+                    <div className="text-emerald-400">成功: {batchResult.success} 人</div>
+                    {batchResult.failed > 0 && (
+                      <div className="text-red-400">
+                        失败: {batchResult.failed} 人
+                        <ul className="ml-4 mt-1 text-slate-400">
+                          {batchResult.details.filter(d => d.startsWith('❌')).map((d, i) => (
+                            <li key={i}>{d}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
